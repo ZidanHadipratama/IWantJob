@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-03-04T21:34:27.190Z"
+stopped_at: Completed 02-data-plumbing/02-01-PLAN.md
+last_updated: "2026-03-04T21:49:37.727Z"
 last_activity: "2026-03-04 - Completed quick task 1: Rename app to IWantJob and set GitHub remote"
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 6
+  completed_plans: 4
   percent: 17
 ---
 
@@ -53,6 +53,7 @@ Progress: [██░░░░░░░░] 17%
 | Phase 01 P01 | 3min | 2 tasks | 22 files |
 | Phase 01 P02 | 4min | 2 tasks | 2 files |
 | Phase 01 P03 | 5min | 2 tasks | 15 files |
+| Phase 02-data-plumbing P01 | 7 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,9 @@ Recent decisions affecting current work:
 - [Phase 01]: Split DB migrations into two files: core tables (001) and form_qa_pairs (002) for modularity
 - [Phase 01]: RLS policies use auth.uid() matching user_id (or id for users table) for all tables
 - [Phase 01]: Flat entrypoint convention: sidepanel.tsx at src/ root per Plasmo requirements
+- [Phase 02-data-plumbing]: Patch target for connection tests is app.dependencies.create_client (not app.routers.connection.create_client)
+- [Phase 02-data-plumbing]: CORS regex updated to allow http://localhost:\d+ for Plasmo dev server alongside chrome-extension origins
+- [Phase 02-data-plumbing]: DBService pattern: DBService(client, user_id) injected per-request via FastAPI Depends — all methods user-scoped, no global state
 
 ### Pending Todos
 
@@ -87,6 +91,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T21:34:27.181Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-data-plumbing/02-CONTEXT.md
+Last session: 2026-03-04T21:49:37.725Z
+Stopped at: Completed 02-data-plumbing/02-01-PLAN.md
+Resume file: None

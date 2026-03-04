@@ -72,7 +72,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **CONFIG-01**: Options page allows user to upload base resume (PDF)
 - [ ] **CONFIG-02**: Options page allows user to set AI provider, API key, and model name — stored in chrome.storage.local
 - [ ] **CONFIG-03**: Options page allows user to set backend URL (default: http://localhost:8000)
-- [ ] **CONFIG-04**: Options page allows user to connect Supabase DB via URL + anon key
+- [x] **CONFIG-04**: Options page allows user to connect Supabase DB via URL + anon key
 - [ ] **CONFIG-05**: Options page allows user to fill profile fields: name, email, LinkedIn, GitHub, work authorization
 
 ### Backend API
@@ -84,7 +84,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **API-05**: POST /log-job — creates or updates a job entry
 - [ ] **API-06**: POST /chat — sends chat message with job context, saves to DB
 - [ ] **API-07**: POST /generate-pdf — converts resume text to PDF via WeasyPrint with 24h TTL
-- [ ] **API-08**: All endpoints validate and sanitize input before passing to AI
+- [x] **API-08**: All endpoints validate and sanitize input before passing to AI
 - [ ] **API-09**: AI calls use LiteLLM exclusively — no direct provider SDK imports
 - [ ] **API-10**: Prompt templates loaded from backend/app/prompts/*.txt at runtime
 
@@ -136,12 +136,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONFIG-01 | Phase 2 | Pending |
 | CONFIG-02 | Phase 2 | Pending |
 | CONFIG-03 | Phase 2 | Pending |
-| CONFIG-04 | Phase 2 | Pending |
+| CONFIG-04 | Phase 2 | Complete |
 | CONFIG-05 | Phase 2 | Pending |
 | API-03 | Phase 2 | Pending |
 | API-04 | Phase 2 | Pending |
 | API-05 | Phase 2 | Pending |
-| API-08 | Phase 2 | Pending |
+| API-08 | Phase 2 | Complete |
 | RESUME-01 | Phase 3 | Pending |
 | RESUME-02 | Phase 3 | Pending |
 | RESUME-03 | Phase 3 | Pending |
