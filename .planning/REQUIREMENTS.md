@@ -129,13 +129,66 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| *(populated by roadmapper)* | | |
+| SETUP-01 | Phase 1 | Pending |
+| SETUP-02 | Phase 1 | Pending |
+| SETUP-03 | Phase 1 | Pending |
+| SETUP-04 | Phase 1 | Pending |
+| CONFIG-01 | Phase 2 | Pending |
+| CONFIG-02 | Phase 2 | Pending |
+| CONFIG-03 | Phase 2 | Pending |
+| CONFIG-04 | Phase 2 | Pending |
+| CONFIG-05 | Phase 2 | Pending |
+| API-03 | Phase 2 | Pending |
+| API-04 | Phase 2 | Pending |
+| API-05 | Phase 2 | Pending |
+| API-08 | Phase 2 | Pending |
+| RESUME-01 | Phase 3 | Pending |
+| RESUME-02 | Phase 3 | Pending |
+| RESUME-03 | Phase 3 | Pending |
+| RESUME-04 | Phase 3 | Pending |
+| RESUME-05 | Phase 3 | Pending |
+| RESUME-06 | Phase 3 | Pending |
+| RESUME-07 | Phase 3 | Pending |
+| FORM-01 | Phase 3 | Pending |
+| FORM-02 | Phase 3 | Pending |
+| FORM-03 | Phase 3 | Pending |
+| API-01 | Phase 3 | Pending |
+| API-02 | Phase 3 | Pending |
+| API-06 | Phase 3 | Pending |
+| API-07 | Phase 3 | Pending |
+| API-09 | Phase 3 | Pending |
+| API-10 | Phase 3 | Pending |
+| DETECT-01 | Phase 4 | Pending |
+| DETECT-02 | Phase 4 | Pending |
+| DETECT-03 | Phase 4 | Pending |
+| DETECT-04 | Phase 4 | Pending |
+| DETECT-05 | Phase 4 | Pending |
+| FORM-04 | Phase 5 | Pending |
+| FORM-05 | Phase 5 | Pending |
+| TRACK-01 | Phase 5 | Pending |
+| TRACK-02 | Phase 5 | Pending |
+| TRACK-03 | Phase 5 | Pending |
+| TRACK-04 | Phase 5 | Pending |
+| TRACK-05 | Phase 5 | Pending |
+| TRACK-06 | Phase 5 | Pending |
+| DETAIL-01 | Phase 5 | Pending |
+| DETAIL-02 | Phase 5 | Pending |
+| DETAIL-03 | Phase 5 | Pending |
+| DETAIL-04 | Phase 5 | Pending |
+| DETAIL-05 | Phase 5 | Pending |
+| CHAT-01 | Phase 5 | Pending |
+| CHAT-02 | Phase 5 | Pending |
+| CHAT-03 | Phase 5 | Pending |
+| CHAT-04 | Phase 5 | Pending |
+| CHAT-05 | Phase 5 | Pending |
+| FORM-06 | Phase 6 | Pending |
+| FORM-07 | Phase 6 | Pending |
 
 **Coverage:**
-- v1 requirements: 47 total
-- Mapped to phases: 0
-- Unmapped: 47
+- v1 requirements: 54 total
+- Mapped to phases: 54
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-04*
-*Last updated: 2026-03-04 after initial definition*
+*Last updated: 2026-03-04 — traceability populated by roadmapper*
