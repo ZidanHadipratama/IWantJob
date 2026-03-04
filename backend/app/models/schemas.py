@@ -83,3 +83,54 @@ class HealthResponse(BaseModel):
 
     status: str
     service: str
+
+
+class QAPair(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    field_id: str
+    question: str
+    answer: str
+    field_type: str = "text"
+    edited_by_user: bool = False
+
+
+class SaveQARequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    job_id: UUID
+    qa_pairs: list[QAPair]
+
+
+class LogJobResponse(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    id: UUID
+    company: str
+    title: str
+    status: str
+    created_at: str
+
+
+class JobResponse(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    id: UUID
+    company: str
+    title: str
+    url: Optional[str] = None
+    job_description: Optional[str] = None
+    status: str
+    applied_at: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: str
+    qa_pairs: Optional[list[dict]] = None
+    resumes: Optional[list[dict]] = None
+    chat_messages: Optional[list[dict]] = None
+
+
+class TestConnectionResponse(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    connected: bool
+    message: str
