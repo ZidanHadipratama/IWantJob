@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 Phase: 2 of 6 (Data Plumbing)
 Plan: 0 of 3 in current phase
 Status: Executing
-Last activity: 2026-03-04 — Extension scaffolding complete with 4-tab side panel, popup, and options shell
+Last activity: 2026-03-04 - Completed quick task 1: Rename app to IWantJob and set GitHub remote
 
 Progress: [██░░░░░░░░] 17%
 
@@ -71,6 +71,12 @@ Recent decisions affecting current work:
 ### Pending Todos
 
 None yet.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 1 | Rename app to IWantJob and set GitHub remote | 2026-03-04 | 9883d7a | [1-rename-app-to-iwantjob-and-set-github-re](./quick/1-rename-app-to-iwantjob-and-set-github-re/) |
 
 ### Blockers/Concerns
 
