@@ -33,8 +33,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: Backend scaffolding — FastAPI app, Pydantic v2 schemas, Docker Compose with WeasyPrint system deps
-- [ ] 01-02: Database schema — all 5 tables, RLS policies, migrations via Supabase
+- [x] 01-01: Backend scaffolding — FastAPI app, Pydantic v2 schemas, Docker Compose with WeasyPrint system deps
+- [x] 01-02: Database schema — all 5 tables, RLS policies, migrations via Supabase
 - [ ] 01-03: Extension scaffolding — Plasmo project, 4-tab side panel shell, Tailwind config
 
 ### Phase 2: Data Plumbing
@@ -128,7 +128,7 @@ Note: Phase 4 depends only on Phase 1 and can begin in parallel with Phase 2-3 i
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/3 | Not started | - |
+| 1. Foundation | 2/3 | In progress | - |
 | 2. Data Plumbing | 0/3 | Not started | - |
 | 3. AI Core | 0/3 | Not started | - |
 | 4. Extension Content Layer | 0/3 | Not started | - |
