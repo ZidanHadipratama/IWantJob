@@ -1,15 +1,14 @@
+"""Verify that Phase 3 endpoints still return 501 (not yet implemented)."""
 import pytest
 from httpx import AsyncClient, ASGITransport
 
 from app.main import app
 
+# Only endpoints still stubbed for Phase 3
 STUB_ENDPOINTS = [
     ("POST", "/tailor-resume"),
     ("POST", "/generate-pdf"),
     ("POST", "/fill-form"),
-    ("POST", "/save-qa"),
-    ("GET", "/job/00000000-0000-0000-0000-000000000000"),
-    ("POST", "/log-job"),
     ("POST", "/chat"),
 ]
 

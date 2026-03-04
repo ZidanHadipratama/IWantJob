@@ -57,6 +57,7 @@ class TailorResumeResponse(BaseModel):
 class LogJobRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
+    job_id: Optional[UUID] = None
     company: str
     title: str
     url: Optional[str] = None
