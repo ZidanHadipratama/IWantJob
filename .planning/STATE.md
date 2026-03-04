@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-data-plumbing/02-01-PLAN.md
-last_updated: "2026-03-04T21:49:37.727Z"
+stopped_at: Completed 02-data-plumbing/02-02-PLAN.md
+last_updated: "2026-03-04T21:55:25.061Z"
 last_activity: "2026-03-04 - Completed quick task 1: Rename app to IWantJob and set GitHub remote"
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
   percent: 17
 ---
 
@@ -54,6 +54,7 @@ Progress: [██░░░░░░░░] 17%
 | Phase 01 P02 | 4min | 2 tasks | 2 files |
 | Phase 01 P03 | 5min | 2 tasks | 15 files |
 | Phase 02-data-plumbing P01 | 7 | 2 tasks | 7 files |
+| Phase 02-data-plumbing P02 | 15 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,9 @@ Recent decisions affecting current work:
 - [Phase 02-data-plumbing]: Patch target for connection tests is app.dependencies.create_client (not app.routers.connection.create_client)
 - [Phase 02-data-plumbing]: CORS regex updated to allow http://localhost:\d+ for Plasmo dev server alongside chrome-extension origins
 - [Phase 02-data-plumbing]: DBService pattern: DBService(client, user_id) injected per-request via FastAPI Depends — all methods user-scoped, no global state
+- [Phase 02-data-plumbing]: LogJobRequest includes optional job_id field — presence routes to update, absence to create (update-or-create pattern)
+- [Phase 02-data-plumbing]: Two separate resume endpoints: /upload-resume for PDF file, /save-resume-text for JSON text paste — cleaner than branching on content-type
+- [Phase 02-data-plumbing]: HTML sanitization via _strip_html() applied to all user text fields before DB writes (API-08 compliance)
 
 ### Pending Todos
 
@@ -91,6 +95,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T21:49:37.725Z
-Stopped at: Completed 02-data-plumbing/02-01-PLAN.md
+Last session: 2026-03-04T21:55:25.060Z
+Stopped at: Completed 02-data-plumbing/02-02-PLAN.md
 Resume file: None

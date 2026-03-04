@@ -79,9 +79,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **API-01**: POST /tailor-resume — generates tailored resume from JD + base resume, returns text + PDF URL + match score
 - [ ] **API-02**: POST /fill-form — generates form answers + auto-saves Q&A pairs to DB
-- [ ] **API-03**: POST /save-qa — explicitly saves/updates Q&A pairs (for user edits in Job Detail View)
-- [ ] **API-04**: GET /job/:id — fetches full job detail (job metadata + JD + tailored resume + Q&A pairs + chat history)
-- [ ] **API-05**: POST /log-job — creates or updates a job entry
+- [x] **API-03**: POST /save-qa — explicitly saves/updates Q&A pairs (for user edits in Job Detail View)
+- [x] **API-04**: GET /job/:id — fetches full job detail (job metadata + JD + tailored resume + Q&A pairs + chat history)
+- [x] **API-05**: POST /log-job — creates or updates a job entry
 - [ ] **API-06**: POST /chat — sends chat message with job context, saves to DB
 - [ ] **API-07**: POST /generate-pdf — converts resume text to PDF via WeasyPrint with 24h TTL
 - [x] **API-08**: All endpoints validate and sanitize input before passing to AI
@@ -138,9 +138,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONFIG-03 | Phase 2 | Pending |
 | CONFIG-04 | Phase 2 | Complete |
 | CONFIG-05 | Phase 2 | Pending |
-| API-03 | Phase 2 | Pending |
-| API-04 | Phase 2 | Pending |
-| API-05 | Phase 2 | Pending |
+| API-03 | Phase 2 | Complete |
+| API-04 | Phase 2 | Complete |
+| API-05 | Phase 2 | Complete |
 | API-08 | Phase 2 | Complete |
 | RESUME-01 | Phase 3 | Pending |
 | RESUME-02 | Phase 3 | Pending |
