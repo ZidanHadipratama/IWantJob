@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-01: Backend scaffolding — FastAPI app, Pydantic v2 schemas, Docker Compose with WeasyPrint system deps
 - [x] 01-02: Database schema — all 5 tables, RLS policies, migrations via Supabase
-- [ ] 01-03: Extension scaffolding — Plasmo project, 4-tab side panel shell, Tailwind config
+- [x] 01-03: Extension scaffolding — Plasmo project, 4-tab side panel shell, Tailwind config
 
 ### Phase 2: Data Plumbing
 **Goal**: User can configure the extension and their data persists in Supabase through the backend API
@@ -47,12 +47,12 @@ Plans:
   3. User can fill in profile fields (name, email, LinkedIn, GitHub, work authorization) on the Options page
   4. POST /log-job creates a job entry in Supabase and GET /job/:id returns the full record
   5. All endpoints reject malformed input with a descriptive error rather than a 500
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: Backend DB service — supabase-py v2 async client, CRUD for all 5 tables, user_id isolation
-- [ ] 02-02: Non-AI endpoints — POST /log-job, GET /job/:id, POST /save-qa with Pydantic validation and input sanitization
-- [ ] 02-03: Options page — base resume upload (pdfplumber), API key config, Supabase config, backend URL, user profile fields
+- [ ] 02-01-PLAN.md — Backend DB service layer: Supabase client from per-request headers, CRUD for all 5 tables, GET /test-connection endpoint
+- [ ] 02-02-PLAN.md — Non-AI endpoints: POST /log-job, GET /job/:id, POST /save-qa, POST /upload-resume with Pydantic validation and input sanitization
+- [ ] 02-03-PLAN.md — Options page: 5 config cards (backend URL, Supabase connection, AI provider, resume upload, profile), auto-save, setup progress
 
 ### Phase 3: AI Core
 **Goal**: All three AI features (resume tailoring, form fill, chat) work end-to-end against the backend with real prompts and validated JSON responses
