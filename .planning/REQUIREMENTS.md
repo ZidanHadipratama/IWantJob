@@ -9,10 +9,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Foundation & Setup
 
-- [ ] **SETUP-01**: Backend scaffolding with FastAPI, Pydantic v2 schemas, Docker Compose, CORS for chrome-extension origins
+- [x] **SETUP-01**: Backend scaffolding with FastAPI, Pydantic v2 schemas, Docker Compose, CORS for chrome-extension origins
 - [ ] **SETUP-02**: Database schema with all 5 tables (users, jobs, form_qa_pairs, resumes, chat_messages) and RLS policies
 - [ ] **SETUP-03**: Extension scaffolding with Plasmo, React, TypeScript, Tailwind, 4-tab side panel shell
-- [ ] **SETUP-04**: Docker Compose one-command setup (`docker compose up`) for backend + dependencies
+- [x] **SETUP-04**: Docker Compose one-command setup (`docker compose up`) for backend + dependencies
 
 ### Content Detection
 
@@ -129,10 +129,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SETUP-01 | Phase 1 | Pending |
+| SETUP-01 | Phase 1 | Complete |
 | SETUP-02 | Phase 1 | Pending |
 | SETUP-03 | Phase 1 | Pending |
-| SETUP-04 | Phase 1 | Pending |
+| SETUP-04 | Phase 1 | Complete |
 | CONFIG-01 | Phase 2 | Pending |
 | CONFIG-02 | Phase 2 | Pending |
 | CONFIG-03 | Phase 2 | Pending |
