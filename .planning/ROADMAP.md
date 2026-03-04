@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. All 5 Supabase tables (users, jobs, form_qa_pairs, resumes, chat_messages) exist with RLS enabled and correct policies applied
   3. Loading the extension in Chrome opens a side panel with 4 tabs (Fill Form, Resume, Tracker, Chat) — all empty shells with no errors
   4. The extension project hot-reloads after code changes without rebuilding manually
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
 - [ ] 01-01: Backend scaffolding — FastAPI app, Pydantic v2 schemas, Docker Compose with WeasyPrint system deps
