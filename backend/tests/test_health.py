@@ -12,4 +12,4 @@ async def test_health_returns_200():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
-    assert data["service"] == "jobpilot-backend"
+    assert data["service"] == "iwantjob-backend"

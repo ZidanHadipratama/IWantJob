@@ -1,8 +1,8 @@
-# JobPilot
+# IWantJob
 
 ## What This Is
 
-JobPilot is an open-source Chrome extension that helps job seekers apply faster and smarter. It reads job pages directly in the browser, uses AI to tailor resumes and fill application forms, tracks every application in a built-in spreadsheet, and stores a full record of every Q&A submitted — all without leaving the browser. Users bring their own AI API key and database. No SaaS, no subscriptions.
+IWantJob is an open-source Chrome extension that helps job seekers apply faster and smarter. It reads job pages directly in the browser, uses AI to tailor resumes and fill application forms, tracks every application in a built-in spreadsheet, and stores a full record of every Q&A submitted — all without leaving the browser. Users bring their own AI API key and database. No SaaS, no subscriptions.
 
 ## Core Value
 
