@@ -13,7 +13,7 @@ JobPilot is built dependency-first. The database schema and scaffolding must exi
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - Scaffolding for all three tiers with architecture boundaries enforced from day one (completed 2026-03-04)
-- [ ] **Phase 2: Data Plumbing** - DB service layer, Options page, and non-AI backend endpoints operational
+- [x] **Phase 2: Data Plumbing** - DB service layer, Options page, and non-AI backend endpoints operational (completed 2026-03-04)
 - [ ] **Phase 3: AI Core** - AI service layer with resume tailoring, form fill, chat, and PDF generation
 - [ ] **Phase 4: Extension Content Layer** - Content scripts and background service worker bridge browser to backend
 - [ ] **Phase 5: Extension UI** - All four side panel tabs fully functional end-to-end against live APIs
@@ -129,7 +129,7 @@ Note: Phase 4 depends only on Phase 1 and can begin in parallel with Phase 2-3 i
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete   | 2026-03-04 |
-| 2. Data Plumbing | 2/3 | In Progress|  |
+| 2. Data Plumbing | 3/3 | Complete   | 2026-03-04 |
 | 3. AI Core | 0/3 | Not started | - |
 | 4. Extension Content Layer | 0/3 | Not started | - |
 | 5. Extension UI | 0/5 | Not started | - |

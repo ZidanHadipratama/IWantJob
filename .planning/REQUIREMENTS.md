@@ -69,11 +69,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Settings & Configuration
 
-- [ ] **CONFIG-01**: Options page allows user to upload base resume (PDF)
-- [ ] **CONFIG-02**: Options page allows user to set AI provider, API key, and model name — stored in chrome.storage.local
-- [ ] **CONFIG-03**: Options page allows user to set backend URL (default: http://localhost:8000)
+- [x] **CONFIG-01**: Options page allows user to upload base resume (PDF)
+- [x] **CONFIG-02**: Options page allows user to set AI provider, API key, and model name — stored in chrome.storage.local
+- [x] **CONFIG-03**: Options page allows user to set backend URL (default: http://localhost:8000)
 - [x] **CONFIG-04**: Options page allows user to connect Supabase DB via URL + anon key
-- [ ] **CONFIG-05**: Options page allows user to fill profile fields: name, email, LinkedIn, GitHub, work authorization
+- [x] **CONFIG-05**: Options page allows user to fill profile fields: name, email, LinkedIn, GitHub, work authorization
 
 ### Backend API
 
@@ -133,11 +133,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SETUP-02 | Phase 1 | Complete |
 | SETUP-03 | Phase 1 | Complete |
 | SETUP-04 | Phase 1 | Complete |
-| CONFIG-01 | Phase 2 | Pending |
-| CONFIG-02 | Phase 2 | Pending |
-| CONFIG-03 | Phase 2 | Pending |
+| CONFIG-01 | Phase 2 | Complete |
+| CONFIG-02 | Phase 2 | Complete |
+| CONFIG-03 | Phase 2 | Complete |
 | CONFIG-04 | Phase 2 | Complete |
-| CONFIG-05 | Phase 2 | Pending |
+| CONFIG-05 | Phase 2 | Complete |
 | API-03 | Phase 2 | Complete |
 | API-04 | Phase 2 | Complete |
 | API-05 | Phase 2 | Complete |

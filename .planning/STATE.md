@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-data-plumbing/02-02-PLAN.md
-last_updated: "2026-03-04T21:55:25.061Z"
+stopped_at: Completed 02-data-plumbing/02-03-PLAN.md
+last_updated: "2026-03-04T22:22:39.538Z"
 last_activity: "2026-03-04 - Completed quick task 1: Rename app to IWantJob and set GitHub remote"
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
   percent: 17
 ---
 
@@ -55,6 +55,7 @@ Progress: [██░░░░░░░░] 17%
 | Phase 01 P03 | 5min | 2 tasks | 15 files |
 | Phase 02-data-plumbing P01 | 7 | 2 tasks | 7 files |
 | Phase 02-data-plumbing P02 | 15 | 2 tasks | 8 files |
+| Phase 02-data-plumbing P03 | 35 | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,9 @@ Recent decisions affecting current work:
 - [Phase 02-data-plumbing]: LogJobRequest includes optional job_id field — presence routes to update, absence to create (update-or-create pattern)
 - [Phase 02-data-plumbing]: Two separate resume endpoints: /upload-resume for PDF file, /save-resume-text for JSON text paste — cleaner than branching on content-type
 - [Phase 02-data-plumbing]: HTML sanitization via _strip_html() applied to all user text fields before DB writes (API-08 compliance)
+- [Phase 02-data-plumbing]: useDebounce custom hook with useRef + setTimeout — no lodash dependency
+- [Phase 02-data-plumbing]: createApiClient() reads storage at call time for always-fresh config without prop drilling
+- [Phase 02-data-plumbing]: getOrCreateUserId() uses crypto.randomUUID() — no uuid library needed
 
 ### Pending Todos
 
@@ -95,6 +99,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T21:55:25.060Z
-Stopped at: Completed 02-data-plumbing/02-02-PLAN.md
+Last session: 2026-03-04T22:22:39.536Z
+Stopped at: Completed 02-data-plumbing/02-03-PLAN.md
 Resume file: None
