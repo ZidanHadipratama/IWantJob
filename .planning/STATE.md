@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 02-data-plumbing/02-03-PLAN.md
-last_updated: "2026-03-04T22:22:39.538Z"
-last_activity: "2026-03-04 - Completed quick task 1: Rename app to IWantJob and set GitHub remote"
+last_updated: "2026-03-05T03:39:06Z"
+last_activity: "2026-03-05 - Completed quick task 2: Fix Phase 2 gaps — Service Role Key label and marker-pdf extraction"
 progress:
   total_phases: 6
   completed_phases: 2
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 Phase: 2 of 6 (Data Plumbing)
 Plan: 0 of 3 in current phase
 Status: Executing
-Last activity: 2026-03-04 - Completed quick task 1: Rename app to IWantJob and set GitHub remote
+Last activity: 2026-03-05 - Completed quick task 2: Fix Phase 2 gaps — Service Role Key label and marker-pdf extraction
 
 Progress: [██░░░░░░░░] 17%
 
@@ -79,6 +79,9 @@ Recent decisions affecting current work:
 - [Phase 02-data-plumbing]: useDebounce custom hook with useRef + setTimeout — no lodash dependency
 - [Phase 02-data-plumbing]: createApiClient() reads storage at call time for always-fresh config without prop drilling
 - [Phase 02-data-plumbing]: getOrCreateUserId() uses crypto.randomUUID() — no uuid library needed
+- [Quick-2]: marker-pdf needs file path not BytesIO — use tempfile.NamedTemporaryFile with finally cleanup
+- [Quick-2]: torch CPU installed before requirements.txt in Dockerfile to prevent CUDA torch pull
+- [Quick-2]: Internal supabase_key field unchanged — only user-facing label updates to Service Role Key
 
 ### Pending Todos
 
@@ -89,6 +92,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 1 | Rename app to IWantJob and set GitHub remote | 2026-03-04 | 9883d7a | [1-rename-app-to-iwantjob-and-set-github-re](./quick/1-rename-app-to-iwantjob-and-set-github-re/) |
+| 2 | Fix Phase 2 gaps — Service Role Key label and marker-pdf extraction | 2026-03-05 | a206a45 | [2-fix-phase-2-gaps-service-role-key-label-](./quick/2-fix-phase-2-gaps-service-role-key-label-/) |
 
 ### Blockers/Concerns
 
@@ -99,6 +103,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-04T22:22:39.536Z
-Stopped at: Completed 02-data-plumbing/02-03-PLAN.md
+Last session: 2026-03-05T03:39:06Z
+Stopped at: Completed quick task 2 — Service Role Key label and marker-pdf extraction
 Resume file: None
