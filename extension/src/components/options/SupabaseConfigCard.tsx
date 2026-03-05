@@ -99,13 +99,16 @@ export function SupabaseConfigCard({ onConfigChange }: SupabaseConfigCardProps) 
           />
         </div>
 
-        {/* Anon key */}
+        {/* Service Role Key */}
         <div>
           <label
             htmlFor="supabase-key"
             className="block text-sm font-medium text-gray-700 mb-1">
-            Supabase Anon Key
+            Supabase Service Role Key
           </label>
+          <p className="text-xs text-gray-500 mb-1">
+            Find this in Supabase Dashboard -&gt; Settings -&gt; API -&gt; service_role key (secret). This key bypasses Row Level Security.
+          </p>
           <div className="relative">
             <input
               id="supabase-key"
@@ -117,7 +120,7 @@ export function SupabaseConfigCard({ onConfigChange }: SupabaseConfigCardProps) 
             />
             <button
               type="button"
-              aria-label={showKey ? "Hide anon key" : "Show anon key"}
+              aria-label={showKey ? "Hide service role key" : "Show service role key"}
               onClick={() => setShowKey((v) => !v)}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded">
               {showKey ? (
