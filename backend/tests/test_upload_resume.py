@@ -34,20 +34,12 @@ def make_mock_db():
     return db
 
 
-def make_mock_pdf_page(text: str):
-    page = MagicMock()
-    page.extract_text.return_value = text
-    return page
-
-
-def make_mock_pdfplumber(text: str = SAMPLE_RESUME_TEXT):
-    """Return a context-manager-compatible pdfplumber mock."""
-    mock_pdf = MagicMock()
-    mock_pdf.pages = [make_mock_pdf_page(text)]
-    mock_cm = MagicMock()
-    mock_cm.__enter__ = MagicMock(return_value=mock_pdf)
-    mock_cm.__exit__ = MagicMock(return_value=False)
-    return mock_cm
+def make_mock_converter(text: str = SAMPLE_RESUME_TEXT):
+    """Return a mock PdfConverter that returns rendered markdown."""
+    mock_rendered = MagicMock()
+    mock_rendered.markdown = text
+    mock_converter = MagicMock(return_value=mock_rendered)
+    return mock_converter
 
 
 # ── Test 1: PDF upload happy path ───────────────────────────────────────────
@@ -56,12 +48,16 @@ def make_mock_pdfplumber(text: str = SAMPLE_RESUME_TEXT):
 @pytest.mark.asyncio
 async def test_upload_resume_pdf_extracts_text_and_saves():
     mock_db = make_mock_db()
-    mock_plumber = make_mock_pdfplumber()
+    mock_rendered = MagicMock()
+    mock_rendered.markdown = SAMPLE_RESUME_TEXT
+    mock_converter_instance = MagicMock(return_value=mock_rendered)
+    mock_converter_class = MagicMock(return_value=mock_converter_instance)
 
     transport = ASGITransport(app=app)
-    with patch("app.routers.resume.DBService", return_value=mock_db), patch(
-        "app.dependencies.create_client", return_value=MagicMock()
-    ), patch("app.routers.resume.pdfplumber.open", return_value=mock_plumber):
+    with patch("app.routers.resume.DBService", return_value=mock_db), \
+         patch("app.dependencies.create_client", return_value=MagicMock()), \
+         patch("app.routers.resume.PdfConverter", mock_converter_class), \
+         patch("app.routers.resume.create_model_dict", return_value={}):
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
                 "/upload-resume",
@@ -101,10 +97,14 @@ async def test_upload_resume_non_pdf_returns_400():
 @pytest.mark.asyncio
 async def test_upload_resume_corrupt_pdf_returns_400():
     mock_db = make_mock_db()
+    mock_converter_instance = MagicMock(side_effect=Exception("PDF parse error"))
+    mock_converter_class = MagicMock(return_value=mock_converter_instance)
+
     transport = ASGITransport(app=app)
-    with patch("app.routers.resume.DBService", return_value=mock_db), patch(
-        "app.dependencies.create_client", return_value=MagicMock()
-    ), patch("app.routers.resume.pdfplumber.open", side_effect=Exception("PDF parse error")):
+    with patch("app.routers.resume.DBService", return_value=mock_db), \
+         patch("app.dependencies.create_client", return_value=MagicMock()), \
+         patch("app.routers.resume.PdfConverter", mock_converter_class), \
+         patch("app.routers.resume.create_model_dict", return_value={}):
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
                 "/upload-resume",

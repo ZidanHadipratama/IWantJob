@@ -1,9 +1,11 @@
 """Resume endpoints: upload PDF, save text, and Phase 3 stubs."""
-import io
+import os
 import re
+import tempfile
 
-import pdfplumber
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from marker.converters.pdf import PdfConverter
+from marker.models import create_model_dict
 from pydantic import BaseModel
 from supabase import Client
 
@@ -39,10 +41,11 @@ async def upload_resume(
     client: Client = Depends(get_supabase_client),
     user_id: str = Depends(get_user_id),
 ):
-    """Accept a PDF file, extract its text via pdfplumber, and save as base resume.
+    """Accept a PDF file, extract its text via marker-pdf, and save as base resume.
 
     Returns the extracted text and a success message.
     Raises 400 for non-PDF files or unreadable PDFs.
+    Supports image-based and scanned PDFs via marker-pdf OCR.
     """
     # Validate content type
     content_type = file.content_type or ""
@@ -55,16 +58,22 @@ async def upload_resume(
     # Read file bytes
     file_bytes = await file.read()
 
-    # Extract text via pdfplumber
+    # Extract text via marker-pdf (supports image-based and scanned PDFs)
     try:
-        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-            pages_text = [page.extract_text() or "" for page in pdf.pages]
-        extracted_text = "\n".join(pages_text).strip()
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(file_bytes)
+            tmp_path = tmp.name
+        converter = PdfConverter(artifact_dict=create_model_dict())
+        rendered = converter(tmp_path)
+        extracted_text = rendered.markdown.strip()
     except Exception as exc:
         raise HTTPException(
             status_code=400,
-            detail="Could not extract text from PDF. The file may be corrupt or image-only.",
+            detail="Could not extract text from PDF. The file may be corrupt or unreadable.",
         ) from exc
+    finally:
+        if 'tmp_path' in locals():
+            os.unlink(tmp_path)
 
     if not extracted_text:
         raise HTTPException(
