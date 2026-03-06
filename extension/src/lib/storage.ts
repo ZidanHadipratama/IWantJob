@@ -1,9 +1,17 @@
 // Type definitions for chrome.storage.local keys
 
-export interface AIConfig {
-  provider: string
+export interface AIModelConfig {
+  provider: string // "openai" | "anthropic" | "google" | "deepseek" | "ollama"
   api_key: string
   model: string
+}
+
+export interface AIConfig {
+  default: AIModelConfig
+  overrides?: {
+    tailor?: AIModelConfig
+    fill?: AIModelConfig
+  }
 }
 
 export interface DBConfig {
@@ -11,21 +19,30 @@ export interface DBConfig {
   supabase_key: string
 }
 
-export interface UserProfileConfig {
-  name: string
-  email: string
-  linkedin_url: string
-  github_url: string
-  work_authorization: string
-}
-
 export interface StorageSchema {
   ai_config: AIConfig
   db_config: DBConfig
   backend_url: string
-  user_profile: UserProfileConfig
   user_id: string
   base_resume_text: string
+  base_resume_json: object | null
+  debug_log: string[]
+  // Session state — persists across tab switches
+  resume_session: {
+    phase: string
+    jdText: string
+    company: string
+    jobTitle: string
+    jobUrl: string
+    tailoredJson: object | null
+    matchScore: number
+  } | null
+  fillform_session: {
+    phase: string
+    fields: object[]
+    answers: object[]
+    fieldCount: number
+  } | null
 }
 
 /**
@@ -76,4 +93,27 @@ export async function getOrCreateUserId(): Promise<string> {
   const newId = crypto.randomUUID()
   await setStorage("user_id", newId)
   return newId
+}
+
+/**
+ * Migrate old flat AIConfig to new per-feature structure.
+ * Old shape: { provider, api_key, model }
+ * New shape: { default: { provider, api_key, model }, overrides?: {...} }
+ */
+export function migrateAIConfig(raw: any): AIConfig {
+  if (raw && raw.default && raw.default.provider) {
+    return raw as AIConfig
+  }
+  if (raw && raw.provider) {
+    return {
+      default: {
+        provider: raw.provider,
+        api_key: raw.api_key || "",
+        model: raw.model || ""
+      }
+    }
+  }
+  return {
+    default: { provider: "openai", api_key: "", model: "gpt-4o" }
+  }
 }

@@ -1,3 +1,45 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-sans text-text bg-surface antialiased;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg
+           hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2
+           disabled:opacity-60 disabled:cursor-not-allowed transition-colors duration-150 cursor-pointer;
+  }
+
+  .btn-accent {
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-accent text-white text-sm font-medium rounded-lg
+           hover:bg-accent-dark focus:outline-none focus:ring-2 focus:ring-accent/50 focus:ring-offset-2
+           disabled:opacity-60 disabled:cursor-not-allowed transition-colors duration-150 cursor-pointer;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary text-sm font-medium rounded-lg
+           hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2
+           disabled:opacity-60 disabled:cursor-not-allowed transition-colors duration-150 cursor-pointer;
+  }
+
+  .card {
+    @apply bg-white rounded-xl border border-gray-200 p-6 transition-colors duration-150;
+  }
+
+  .input-field {
+    @apply w-full border border-gray-300 rounded-lg px-3 py-2 text-sm
+           focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary
+           transition-colors duration-150 bg-white text-text;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-text-secondary mb-1;
+  }
+}

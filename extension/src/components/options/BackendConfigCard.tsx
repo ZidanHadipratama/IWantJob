@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { getStorage, setStorage } from "~lib/storage"
 
 const DEFAULT_BACKEND_URL = "http://localhost:8000"
@@ -12,18 +12,20 @@ export function BackendConfigCard({ onConfigChange }: BackendConfigCardProps) {
   const [savedIndicator, setSavedIndicator] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const onConfigChangeRef = useRef(onConfigChange)
+  onConfigChangeRef.current = onConfigChange
+
   useEffect(() => {
     getStorage("backend_url").then((url) => {
       if (url) {
         setBackendUrl(url)
-        onConfigChange?.(!!url)
+        onConfigChangeRef.current?.(!!url)
       } else {
-        // Set default if not stored
         setBackendUrl(DEFAULT_BACKEND_URL)
-        onConfigChange?.(true)
+        onConfigChangeRef.current?.(true)
       }
     })
-  }, [onConfigChange])
+  }, [])
 
   const save = useCallback(
     (value: string) => {
@@ -44,20 +46,16 @@ export function BackendConfigCard({ onConfigChange }: BackendConfigCardProps) {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div className="card">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold text-gray-800">
-          Backend Connection
-        </h2>
+        <h2 className="text-base font-semibold text-text">Backend Connection</h2>
         {savedIndicator && (
-          <span className="text-xs text-green-600 font-medium">Saved</span>
+          <span className="text-xs text-primary font-medium">Saved</span>
         )}
       </div>
 
       <div>
-        <label
-          htmlFor="backend-url"
-          className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="backend-url" className="label">
           Backend URL
         </label>
         <input
@@ -66,9 +64,9 @@ export function BackendConfigCard({ onConfigChange }: BackendConfigCardProps) {
           value={backendUrl}
           onChange={(e) => handleChange(e.target.value)}
           placeholder={DEFAULT_BACKEND_URL}
-          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="input-field"
         />
-        <p className="text-xs text-gray-400 mt-1">
+        <p className="text-xs text-text-muted mt-1">
           Default: {DEFAULT_BACKEND_URL} — change if deploying to cloud
         </p>
       </div>

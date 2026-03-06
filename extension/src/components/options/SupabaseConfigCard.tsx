@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Eye, EyeOff, CheckCircle, XCircle, Loader } from "lucide-react"
 import { getStorage, setStorage, type DBConfig } from "~lib/storage"
 import { createApiClient } from "~lib/api"
@@ -18,18 +18,20 @@ export function SupabaseConfigCard({ onConfigChange }: SupabaseConfigCardProps) 
     useState<ConnectionStatus>("idle")
   const [connectionMessage, setConnectionMessage] = useState("")
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onConfigChangeRef = useRef(onConfigChange)
+  onConfigChangeRef.current = onConfigChange
 
   useEffect(() => {
     getStorage("db_config").then((config) => {
       if (config) {
         setSupabaseUrl(config.supabase_url || "")
         setSupabaseKey(config.supabase_key || "")
-        onConfigChange?.(
+        onConfigChangeRef.current?.(
           !!(config.supabase_url && config.supabase_key)
         )
       }
     })
-  }, [onConfigChange])
+  }, [])
 
   const save = useCallback(
     (config: DBConfig) => {
@@ -71,22 +73,17 @@ export function SupabaseConfigCard({ onConfigChange }: SupabaseConfigCardProps) 
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div className="card">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold text-gray-800">
-          Database Connection
-        </h2>
+        <h2 className="text-base font-semibold text-text">Database Connection</h2>
         {savedIndicator && (
-          <span className="text-xs text-green-600 font-medium">Saved</span>
+          <span className="text-xs text-primary font-medium">Saved</span>
         )}
       </div>
 
       <div className="space-y-4">
-        {/* Supabase URL */}
         <div>
-          <label
-            htmlFor="supabase-url"
-            className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="supabase-url" className="label">
             Supabase Project URL
           </label>
           <input
@@ -95,19 +92,16 @@ export function SupabaseConfigCard({ onConfigChange }: SupabaseConfigCardProps) 
             value={supabaseUrl}
             onChange={(e) => handleUrlChange(e.target.value)}
             placeholder="https://your-project.supabase.co"
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="input-field"
           />
         </div>
 
-        {/* Service Role Key */}
         <div>
-          <label
-            htmlFor="supabase-key"
-            className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="supabase-key" className="label">
             Supabase Service Role Key
           </label>
-          <p className="text-xs text-gray-500 mb-1">
-            Find this in Supabase Dashboard -&gt; Settings -&gt; API -&gt; service_role key (secret). This key bypasses Row Level Security.
+          <p className="text-xs text-text-muted mb-1">
+            Find this in Supabase Dashboard &gt; Settings &gt; API &gt; service_role key (secret). This key bypasses Row Level Security.
           </p>
           <div className="relative">
             <input
@@ -116,13 +110,13 @@ export function SupabaseConfigCard({ onConfigChange }: SupabaseConfigCardProps) 
               value={supabaseKey}
               onChange={(e) => handleKeyChange(e.target.value)}
               placeholder="eyJ..."
-              className="w-full border border-gray-300 rounded-md px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="input-field pr-10"
             />
             <button
               type="button"
               aria-label={showKey ? "Hide service role key" : "Show service role key"}
               onClick={() => setShowKey((v) => !v)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded">
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/50 rounded cursor-pointer">
               {showKey ? (
                 <EyeOff className="w-4 h-4" />
               ) : (
@@ -132,13 +126,12 @@ export function SupabaseConfigCard({ onConfigChange }: SupabaseConfigCardProps) 
           </div>
         </div>
 
-        {/* Test Connection button + status */}
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={handleTestConnection}
             disabled={connectionStatus === "loading"}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed transition-colors">
+            className="btn-primary">
             {connectionStatus === "loading" && (
               <Loader className="w-4 h-4 animate-spin" />
             )}
@@ -146,7 +139,7 @@ export function SupabaseConfigCard({ onConfigChange }: SupabaseConfigCardProps) 
           </button>
 
           {connectionStatus === "success" && (
-            <div className="flex items-center gap-1.5 text-green-600">
+            <div className="flex items-center gap-1.5 text-primary">
               <CheckCircle className="w-4 h-4" />
               <span className="text-sm">{connectionMessage}</span>
             </div>
