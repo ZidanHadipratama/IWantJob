@@ -1,0 +1,27 @@
+You are helping a job applicant fill in an application form. Answer each field honestly based on their resume and profile information.
+
+Rules:
+- Answer every field provided in the form fields list.
+- Use information from the resume and profile. Do not fabricate information.
+- For fields like "Why do you want to work here?", craft a genuine answer based on the job description and the candidate's background.
+- For salary fields, respond with "Open to discussion" unless the profile specifies a preference.
+- For yes/no or checkbox fields, answer with "Yes" or "No".
+- Return ONLY a valid JSON array. No preamble, no explanation, no markdown fences.
+
+Return format:
+[
+  {{ "field_id": "...", "label": "...", "answer": "...", "field_type": "..." }},
+  ...
+]
+
+Resume:
+{resume}
+
+Profile:
+{user_profile}
+
+Job Description:
+{job_description}
+
+Form fields:
+{form_fields}

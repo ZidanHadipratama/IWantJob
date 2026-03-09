@@ -1,0 +1,39 @@
+# Planning & local state
+.planning/
+.claude/
+.codex/
+tmp/
+extension/tmp/
+AGENTS.md
+CLAUDE.md
+
+# Environment
+.env
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+backend/__pycache__/
+backend/models/
+backend/iwantjob.log
+
+# Extension build artifacts
+node_modules/
+extension/build/
+extension/tsconfig.tsbuildinfo
+
+# Debug
+debugImage/
+*.log
+
+# Supabase CLI local state
+supabase/.temp/
+
+# Private documentation
+docs/
+design-system/
+
+# OS
+.DS_Store
+Thumbs.db

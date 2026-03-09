@@ -1,0 +1,81 @@
+Convert the following resume text into structured JSON. Return ONLY valid JSON with no preamble, no explanation, no markdown fences.
+
+Important rules:
+- Use empty string "" instead of null for text fields where data is not found.
+- Every distinct section of the resume (Experience, Education, Projects, Leadership, Certifications, Volunteer, Awards, Publications, etc.) becomes an entry in the "sections" array.
+- The AI decides section titles based on what exists in the resume.
+- Each section contains "entries" — one per item (one per job, one per school, one per project, etc.).
+- Each entry has separate fields for the heading, subheading, dates, location, and bullets. Do NOT combine dates or location into heading or subheading.
+- "heading" = organization/company/institution/project name
+- "subheading" = role/title/degree (e.g. "Software Engineer", "BS Computer Science, GPA: 3.8")
+- "dates" = date range (e.g. "01/2020 - Present", "2016 - 2020")
+- "location" = city/state/country (e.g. "Mountain View, CA")
+- "url" = project URL or portfolio link if present, null otherwise
+- "bullets" = list of achievement/description strings
+- Make sure to write every word and sentence. Don't summarize or compact anything.
+
+Use this exact schema:
+{{
+  "contact": {{
+    "name": "string",
+    "email": "string",
+    "phone": "string or null",
+    "location": "string or null",
+    "linkedin": "string or null",
+    "github": "string or null",
+    "website": "string or null"
+  }},
+  "summary": "string or null (professional summary/objective if present)",
+  "skills": {{
+    "languages": ["string", ...] or null,
+    "frameworks": ["string", ...] or null,
+    "tools": ["string", ...] or null,
+    "other": ["string", ...] or null
+  }} or null,
+  "sections": [
+    {{
+      "title": "Experience",
+      "entries": [
+        {{
+          "heading": "Google",
+          "subheading": "Software Engineer",
+          "dates": "01/2020 - Present",
+          "location": "Mountain View, CA",
+          "url": null,
+          "bullets": ["Built X that improved Y by Z%", "Led team of 5..."]
+        }}
+      ]
+    }},
+    {{
+      "title": "Education",
+      "entries": [
+        {{
+          "heading": "Massachusetts Institute of Technology",
+          "subheading": "BS Computer Science, GPA: 3.8",
+          "dates": "2016 - 2020",
+          "location": "Cambridge, MA",
+          "url": null,
+          "bullets": []
+        }}
+      ]
+    }},
+    {{
+      "title": "Projects",
+      "entries": [
+        {{
+          "heading": "Project Name",
+          "subheading": "Short description of the project",
+          "dates": "03/2023",
+          "location": null,
+          "url": "https://github.com/user/project",
+          "bullets": ["Built X using Y...", "Implemented Z..."]
+        }}
+      ]
+    }}
+  ]
+}}
+
+The "sections" array should contain ALL sections found in the resume, in the order they appear. Common sections include: Experience, Education, Projects, Leadership, Certifications, Volunteer Work, Awards, Publications, Research — but use whatever section titles match the actual resume.
+
+Resume text:
+{resume_text}

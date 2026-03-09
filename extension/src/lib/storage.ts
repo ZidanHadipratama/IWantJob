@@ -19,6 +19,49 @@ export interface DBConfig {
   supabase_key: string
 }
 
+export interface DraftQAPair {
+  field_id: string
+  label: string
+  answer: string
+  field_type: string
+}
+
+export interface ActiveJobContext {
+  phase: "extracted" | "tailored"
+  persistence_state: "draft" | "saved"
+  job_id?: string | null
+  job_description: string
+  company: string
+  job_title: string
+  job_url: string
+  page_title: string
+  page_excerpt: string
+  metadata_lines: string[]
+  tailored_resume_json: object | null
+  draft_qa_pairs: DraftQAPair[]
+}
+
+export interface ResumeSessionState {
+  phase: string
+  jobId?: string | null
+  jdText: string
+  company: string
+  jobTitle: string
+  jobUrl: string
+  pageTitle: string
+  pageExcerpt: string
+  metadataLines: string[]
+  tailoredJson: object | null
+  matchScore: number
+}
+
+export interface FillFormSessionState {
+  phase: string
+  fields: object[]
+  answers: object[]
+  fieldCount: number
+}
+
 export interface StorageSchema {
   ai_config: AIConfig
   db_config: DBConfig
@@ -28,21 +71,112 @@ export interface StorageSchema {
   base_resume_json: object | null
   debug_log: string[]
   // Session state — persists across tab switches
-  resume_session: {
-    phase: string
-    jdText: string
-    company: string
-    jobTitle: string
-    jobUrl: string
-    tailoredJson: object | null
-    matchScore: number
-  } | null
-  fillform_session: {
-    phase: string
-    fields: object[]
-    answers: object[]
-    fieldCount: number
-  } | null
+  resume_session: ResumeSessionState | null
+  active_job_context: ActiveJobContext | null
+  fillform_session: FillFormSessionState | null
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : ""
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
+}
+
+function asObjectArray(value: unknown): object[] {
+  return Array.isArray(value) ? value.filter((item): item is object => Boolean(item) && typeof item === "object") : []
+}
+
+export function normalizeResumeSession(raw: unknown): ResumeSessionState | null {
+  if (!raw || typeof raw !== "object") return null
+
+  const session = raw as Partial<ResumeSessionState>
+  const jdText = asString(session.jdText).trim()
+  const phase = session.phase === "tailored" && session.tailoredJson ? "tailored" : session.phase === "extracted" ? "extracted" : "idle"
+
+  if (!jdText || phase === "idle") return null
+
+  return {
+    phase,
+    jobId: typeof session.jobId === "string" ? session.jobId : null,
+    jdText,
+    company: asString(session.company),
+    jobTitle: asString(session.jobTitle),
+    jobUrl: asString(session.jobUrl),
+    pageTitle: asString(session.pageTitle),
+    pageExcerpt: asString(session.pageExcerpt),
+    metadataLines: asStringArray(session.metadataLines),
+    tailoredJson: session.tailoredJson && typeof session.tailoredJson === "object" ? session.tailoredJson : null,
+    matchScore: typeof session.matchScore === "number" ? session.matchScore : 0
+  }
+}
+
+export function normalizeFillFormSession(raw: unknown): FillFormSessionState | null {
+  if (!raw || typeof raw !== "object") return null
+
+  const session = raw as Partial<FillFormSessionState>
+  const phase = session.phase === "answered" ? "answered" : session.phase === "extracted" ? "extracted" : "idle"
+  if (phase === "idle") return null
+
+  const fields = asObjectArray(session.fields)
+  const answers = asObjectArray(session.answers)
+  const fieldCount = typeof session.fieldCount === "number" ? session.fieldCount : fields.length
+
+  if (phase === "extracted" && fields.length === 0) return null
+  if (phase === "answered" && answers.length === 0) return null
+
+  return {
+    phase,
+    fields,
+    answers,
+    fieldCount
+  }
+}
+
+export function normalizeActiveJobContext(raw: unknown): ActiveJobContext | null {
+  if (!raw || typeof raw !== "object") return null
+
+  const context = raw as Partial<ActiveJobContext>
+  const jobDescription = asString(context.job_description).trim()
+  if (!jobDescription) return null
+
+  const tailoredResume =
+    context.tailored_resume_json && typeof context.tailored_resume_json === "object"
+      ? context.tailored_resume_json
+      : null
+
+  const phase: ActiveJobContext["phase"] =
+    context.phase === "tailored" && tailoredResume ? "tailored" : "extracted"
+  const jobId = typeof context.job_id === "string" && context.job_id ? context.job_id : null
+  const persistenceState: ActiveJobContext["persistence_state"] =
+    context.persistence_state === "saved" && jobId ? "saved" : "draft"
+  const draftQAPairs = Array.isArray(context.draft_qa_pairs)
+    ? context.draft_qa_pairs
+        .filter((pair): pair is DraftQAPair => Boolean(pair) && typeof pair === "object")
+        .map((pair) => ({
+          field_id: asString(pair.field_id),
+          label: asString(pair.label),
+          answer: asString(pair.answer),
+          field_type: asString(pair.field_type) || "text"
+        }))
+        .filter((pair) => pair.field_id || pair.label || pair.answer)
+    : []
+
+  return {
+    phase,
+    persistence_state: persistenceState,
+    job_id: jobId,
+    job_description: jobDescription,
+    company: asString(context.company),
+    job_title: asString(context.job_title),
+    job_url: asString(context.job_url),
+    page_title: asString(context.page_title),
+    page_excerpt: asString(context.page_excerpt),
+    metadata_lines: asStringArray(context.metadata_lines),
+    tailored_resume_json: tailoredResume,
+    draft_qa_pairs: draftQAPairs
+  }
 }
 
 /**

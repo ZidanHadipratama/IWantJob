@@ -8,6 +8,101 @@ import {
 
 const DEFAULT_BACKEND_URL = "http://localhost:8000"
 
+export interface QAPairItem {
+  field_id: string
+  question: string
+  answer: string
+  field_type: string
+  edited_by_user: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ResumeRecord {
+  id?: string
+  job_id?: string | null
+  resume_text?: string
+  resume_json?: object | null
+  pdf_url?: string | null
+  is_base: boolean
+  created_at: string
+}
+
+export interface JobListItem {
+  id: string
+  company: string
+  title: string
+  url?: string
+  status: string
+  job_type?: string
+  employment_type?: string
+  location?: string
+  salary_range?: string
+  applied_at?: string
+  created_at: string
+}
+
+export interface JobDetail {
+  id: string
+  company: string
+  title: string
+  url?: string
+  job_description?: string
+  status: string
+  job_type?: string
+  employment_type?: string
+  location?: string
+  salary_range?: string
+  applied_at?: string
+  notes?: string
+  created_at: string
+  qa_pairs: QAPairItem[]
+  resumes: ResumeRecord[]
+  chat_messages: Array<Record<string, unknown>>
+}
+
+export interface JobMutation {
+  job_id: string
+  company: string
+  title: string
+  url?: string
+  job_description?: string
+  status?: string
+  job_type?: string
+  employment_type?: string
+  location?: string
+  salary_range?: string
+  notes?: string
+}
+
+export interface JobMutationResult {
+  id: string
+  company: string
+  title: string
+  status: string
+  job_type?: string
+  employment_type?: string
+  location?: string
+  salary_range?: string
+  notes?: string
+  created_at: string
+}
+
+export interface TailorJobInfo {
+  company?: string
+  title?: string
+  job_type?: string
+  employment_type?: string
+  location?: string
+  salary_range?: string
+}
+
+export interface DraftSaveResult {
+  job: JobMutationResult
+  qa_pairs: QAPairItem[]
+  resume_saved: boolean
+}
+
 export interface ApiClient {
   testConnection(): Promise<{ connected: boolean; message: string }>
   saveResumeText(text: string): Promise<{ resume_text: string; message: string }>
@@ -19,8 +114,20 @@ export interface ApiClient {
     job_description: string
     resume_text?: string
     resume_json?: object
+    company?: string
+    title?: string
+    url?: string
+    page_title?: string
+    page_excerpt?: string
+    metadata_lines?: string[]
+    persist_job?: boolean
     job_id?: string
-  }): Promise<{ tailored_resume_json: object; match_score: number; job_id?: string }>
+  }): Promise<{
+    tailored_resume_json: object
+    job_info: TailorJobInfo
+    match_score: number
+    job_id?: string
+  }>
   generatePdf(resumeJson: object): Promise<Blob>
   fillForm(req: {
     form_fields: object[]
@@ -29,6 +136,21 @@ export interface ApiClient {
     job_id?: string
     job_description?: string
   }): Promise<{ answers: object[]; job_id?: string; qa_saved: boolean }>
+  saveApplicationDraft(req: {
+    job_id?: string
+    company: string
+    title: string
+    url?: string
+    job_description?: string
+    status?: string
+    job_type?: string
+    employment_type?: string
+    location?: string
+    salary_range?: string
+    notes?: string
+    tailored_resume_json: object
+    qa_pairs?: QAPairItem[]
+  }): Promise<DraftSaveResult>
   logJob(req: {
     company: string
     title: string
@@ -36,7 +158,17 @@ export interface ApiClient {
     job_description?: string
     status?: string
     job_id?: string
-  }): Promise<{ id: string; company: string; title: string; status: string; created_at: string }>
+    job_type?: string
+    employment_type?: string
+    location?: string
+    salary_range?: string
+    notes?: string
+  }): Promise<JobMutationResult>
+  getJob(jobId: string): Promise<JobDetail>
+  saveQA(jobId: string, qaPairs: QAPairItem[]): Promise<{ saved: number; qa_pairs: QAPairItem[] }>
+  updateJob(req: JobMutation): Promise<JobMutationResult>
+  getJobs(): Promise<JobListItem[]>
+  deleteJob(jobId: string): Promise<void>
 }
 
 /**
@@ -215,6 +347,22 @@ export async function createApiClient(): Promise<ApiClient> {
       return await res.json()
     },
 
+    async saveApplicationDraft(req) {
+      const res = await fetch(`${backendUrl}/save-application-draft`, {
+        method: "POST",
+        headers: {
+          ...baseHeaders(),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(req)
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.detail || `Server returned ${res.status}`)
+      }
+      return await res.json()
+    },
+
     async generatePdf(resumeJson: object) {
       const res = await fetch(`${backendUrl}/generate-pdf`, {
         method: "POST",
@@ -245,6 +393,70 @@ export async function createApiClient(): Promise<ApiClient> {
         throw new Error(body?.detail || `Server returned ${res.status}`)
       }
       return await res.json()
+    },
+
+    async getJob(jobId: string) {
+      const res = await fetch(`${backendUrl}/job/${jobId}`, {
+        method: "GET",
+        headers: baseHeaders()
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.detail || `Server returned ${res.status}`)
+      }
+      const data = await res.json()
+      return {
+        ...data,
+        qa_pairs: Array.isArray(data.qa_pairs) ? data.qa_pairs : [],
+        resumes: Array.isArray(data.resumes) ? data.resumes : [],
+        chat_messages: Array.isArray(data.chat_messages) ? data.chat_messages : []
+      }
+    },
+
+    async saveQA(jobId: string, qaPairs: QAPairItem[]) {
+      const res = await fetch(`${backendUrl}/save-qa`, {
+        method: "POST",
+        headers: {
+          ...baseHeaders(),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          job_id: jobId,
+          qa_pairs: qaPairs
+        })
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.detail || `Server returned ${res.status}`)
+      }
+      return await res.json()
+    },
+
+    async updateJob(req: JobMutation) {
+      return this.logJob(req)
+    },
+
+    async getJobs() {
+      const res = await fetch(`${backendUrl}/jobs`, {
+        method: "GET",
+        headers: baseHeaders()
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.detail || `Server returned ${res.status}`)
+      }
+      return await res.json()
+    },
+
+    async deleteJob(jobId: string) {
+      const res = await fetch(`${backendUrl}/job/${jobId}`, {
+        method: "DELETE",
+        headers: baseHeaders()
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.detail || `Server returned ${res.status}`)
+      }
     }
   }
 }

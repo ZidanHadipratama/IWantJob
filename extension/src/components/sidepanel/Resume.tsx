@@ -1,7 +1,14 @@
 import { useState, useEffect, useCallback } from "react"
-import { FileText, Download, Loader, AlertCircle, CheckCircle, Copy, RefreshCw, ChevronDown, ChevronRight } from "lucide-react"
-import { createApiClient } from "~lib/api"
-import { getStorage, setStorage } from "~lib/storage"
+import { FileText, Download, Loader, AlertCircle, CheckCircle, Copy, RefreshCw, ChevronDown, ChevronRight, Pencil, X, Plus, Trash2, Save } from "lucide-react"
+import { createApiClient, type QAPairItem } from "~lib/api"
+import {
+  getStorage,
+  normalizeActiveJobContext,
+  normalizeFillFormSession,
+  normalizeResumeSession,
+  setStorage,
+  type ActiveJobContext
+} from "~lib/storage"
 import { debug, debugError } from "~lib/debug"
 import { sendToContentScript } from "~lib/messaging"
 import type { ExtractJDResponse } from "~lib/types"
@@ -32,38 +39,156 @@ export default function Resume() {
   const [loading, setLoading] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [error, setError] = useState("")
+  const [jobId, setJobId] = useState<string | null>(null)
   const [jdText, setJdText] = useState("")
   const [company, setCompany] = useState("")
   const [jobTitle, setJobTitle] = useState("")
   const [jobUrl, setJobUrl] = useState("")
+  const [pageTitle, setPageTitle] = useState("")
+  const [pageExcerpt, setPageExcerpt] = useState("")
+  const [metadataLines, setMetadataLines] = useState<string[]>([])
   const [tailoredJson, setTailoredJson] = useState<ResumeJSON | null>(null)
   const [matchScore, setMatchScore] = useState(0)
   const [copied, setCopied] = useState(false)
+  const [persistenceState, setPersistenceState] = useState<"draft" | "saved">("draft")
+  const [savingDraft, setSavingDraft] = useState(false)
+  const [saveTone, setSaveTone] = useState<"neutral" | "success" | "error">("neutral")
+  const [saveMessage, setSaveMessage] = useState("")
 
   // Restore session on mount
   useEffect(() => {
     debug("Resume", "Component mounted")
-    getStorage("resume_session").then(session => {
+    Promise.all([
+      getStorage("resume_session"),
+      getStorage("active_job_context"),
+      getStorage("fillform_session")
+    ]).then(([sessionRaw, contextRaw, fillFormRaw]) => {
+      const session = normalizeResumeSession(sessionRaw)
+      const context = normalizeActiveJobContext(contextRaw)
+      const fillFormSession = normalizeFillFormSession(fillFormRaw)
+
+      if (context) {
+        setPhase(context.phase as Phase)
+        setJobId(context.job_id || null)
+        setJdText(context.job_description)
+        setCompany(context.company)
+        setJobTitle(context.job_title)
+        setJobUrl(context.job_url)
+        setPageTitle(context.page_title || "")
+        setPageExcerpt(context.page_excerpt || "")
+        setMetadataLines(Array.isArray(context.metadata_lines) ? context.metadata_lines : [])
+        setTailoredJson((context.tailored_resume_json as ResumeJSON | null) || null)
+        setPersistenceState(context.persistence_state || "draft")
+        setMatchScore(session?.matchScore || 0)
+        debug("Resume", "Restored active job context, phase:", context.phase)
+        return
+      }
+
+      if (fillFormSession) {
+        setSaveTone("neutral")
+        setSaveMessage("Recovered a form draft, but the matching Resume context is incomplete. Rebuild the Resume flow before saving.")
+      }
+
       if (session && session.phase !== "idle") {
         setPhase(session.phase as Phase)
+        setJobId(session.jobId || null)
         setJdText(session.jdText)
         setCompany(session.company)
         setJobTitle(session.jobTitle)
         setJobUrl(session.jobUrl)
+        setPageTitle(session.pageTitle || "")
+        setPageExcerpt(session.pageExcerpt || "")
+        setMetadataLines(Array.isArray(session.metadataLines) ? session.metadataLines : [])
         setTailoredJson(session.tailoredJson as ResumeJSON | null)
         setMatchScore(session.matchScore)
+        setPersistenceState("draft")
         debug("Resume", "Restored session, phase:", session.phase)
       }
     })
   }, [])
 
+  useEffect(() => {
+    function handleStorageChange(
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: string
+    ) {
+      if (areaName !== "local" || !changes.active_job_context) return
+      const nextContext = normalizeActiveJobContext(changes.active_job_context.newValue)
+      setJobId(nextContext?.job_id || null)
+      setPersistenceState(nextContext?.persistence_state || "draft")
+      if (nextContext?.persistence_state === "draft") {
+        setSaveTone("neutral")
+        setSaveMessage("")
+      }
+    }
+
+    chrome.storage.onChanged.addListener(handleStorageChange)
+    return () => chrome.storage.onChanged.removeListener(handleStorageChange)
+  }, [])
+
   // Save session whenever state changes
-  const saveSession = useCallback((p: Phase, jd: string, co: string, jt: string, ju: string, tj: ResumeJSON | null, ms: number) => {
+  const saveSession = useCallback((
+    p: Phase,
+    id: string | null,
+    jd: string,
+    co: string,
+    jt: string,
+    ju: string,
+    pt: string,
+    pe: string,
+    ml: string[],
+    tj: ResumeJSON | null,
+    ms: number
+  ) => {
     setStorage("resume_session", {
-      phase: p, jdText: jd, company: co, jobTitle: jt, jobUrl: ju,
+      phase: p, jobId: id, jdText: jd, company: co, jobTitle: jt, jobUrl: ju,
+      pageTitle: pt, pageExcerpt: pe, metadataLines: ml,
       tailoredJson: tj, matchScore: ms,
     })
   }, [])
+
+  const syncActiveJobContext = useCallback((
+    context: Omit<ActiveJobContext, "draft_qa_pairs"> | null
+  ) => {
+    if (!context) {
+      return setStorage("active_job_context", null)
+    }
+
+    return getStorage("active_job_context").then((existingRaw) => {
+      const existing = normalizeActiveJobContext(existingRaw)
+      const canReuseDraftAnswers = Boolean(
+        existing &&
+        existing.job_url === context.job_url &&
+        existing.page_title === context.page_title
+      )
+
+      return setStorage("active_job_context", {
+        ...context,
+        persistence_state: context.persistence_state,
+        draft_qa_pairs: canReuseDraftAnswers && Array.isArray(existing?.draft_qa_pairs)
+          ? existing.draft_qa_pairs
+          : []
+      })
+    })
+  }, [])
+
+  useEffect(() => {
+    if (phase === "idle" || !jdText.trim()) return
+
+    syncActiveJobContext({
+      phase,
+      persistence_state: persistenceState,
+      job_id: jobId,
+      job_description: jdText,
+      company,
+      job_title: jobTitle,
+      job_url: jobUrl,
+      page_title: pageTitle,
+      page_excerpt: pageExcerpt,
+      metadata_lines: metadataLines,
+      tailored_resume_json: tailoredJson
+    })
+  }, [phase, persistenceState, jobId, jdText, company, jobTitle, jobUrl, pageTitle, pageExcerpt, metadataLines, tailoredJson, syncActiveJobContext])
 
   async function handleExtractJD() {
     setLoading(true)
@@ -75,15 +200,40 @@ export default function Resume() {
         setError("Could not extract text from this page. Make sure you're on a job description page.")
         return
       }
+      await Promise.all([
+        setStorage("fillform_session", null),
+        setStorage("active_job_context", null)
+      ])
       debug("Resume", `JD extracted: ${result.text.length} chars, company=${result.company}, title=${result.job_title}`)
       debug("Resume", `Readability: used=${result.used_readability}, title=${result.readability_title}, siteName=${result.readability_siteName}`)
       debug("Resume", "Full extracted text:", result.text)
       setJdText(result.text)
       setJobUrl(result.url)
+      setJobId(null)
       setCompany(result.company || "")
       setJobTitle(result.job_title || "")
+      setPageTitle(result.page_title || "")
+      setPageExcerpt(result.readability_excerpt || "")
+      setMetadataLines(result.metadata_lines || [])
+      setTailoredJson(null)
+      setMatchScore(0)
+      setPersistenceState("draft")
+      setSaveTone("neutral")
+      setSaveMessage("")
       setPhase("extracted")
-      saveSession("extracted", result.text, result.company || "", result.job_title || "", result.url, null, 0)
+      saveSession(
+        "extracted",
+        null,
+        result.text,
+        result.company || "",
+        result.job_title || "",
+        result.url,
+        result.page_title || "",
+        result.readability_excerpt || "",
+        result.metadata_lines || [],
+        null,
+        0
+      )
     } catch (err) {
       debugError("Resume", "EXTRACT_JD failed:", err)
       setError(err instanceof Error ? err.message : "Could not connect to the page. Try refreshing the page.")
@@ -105,23 +255,55 @@ export default function Resume() {
       const client = await createApiClient()
       const companyName = company || "Unknown Company"
       const title = jobTitle || "Unknown Position"
-      debug("Resume", `Logging job: ${companyName} - ${title}`)
-      const jobResult = await client.logJob({
-        company: companyName, title, url: jobUrl,
-        job_description: jdText, status: "saved"
-      })
 
       debug("Resume", "Calling tailor-resume...")
       const tailorResult = await client.tailorResume({
-        job_description: jdText, resume_json: resumeJson, job_id: jobResult.id
+        job_description: jdText,
+        resume_json: resumeJson,
+        company: companyName,
+        title,
+        url: jobUrl,
+        page_title: pageTitle,
+        page_excerpt: pageExcerpt,
+        metadata_lines: metadataLines,
+        persist_job: false
       })
-      debug("Resume", "Tailor result:", { matchScore: tailorResult.match_score })
+      debug("Resume", "Tailor result:", {
+        matchScore: tailorResult.match_score,
+        jobId: tailorResult.job_id,
+        jobInfo: tailorResult.job_info
+      })
 
       const json = tailorResult.tailored_resume_json as ResumeJSON
+      const resolvedCompany = tailorResult.job_info?.company || companyName
+      const resolvedTitle = tailorResult.job_info?.title || title
+      await Promise.all([
+        setStorage("fillform_session", null),
+        setStorage("active_job_context", null)
+      ])
+      const resolvedJobId = null
+      setJobId(resolvedJobId)
+      setCompany(resolvedCompany)
+      setJobTitle(resolvedTitle)
       setTailoredJson(json)
       setMatchScore(tailorResult.match_score)
+      setPersistenceState("draft")
+      setSaveTone("neutral")
+      setSaveMessage("")
       setPhase("tailored")
-      saveSession("tailored", jdText, company, jobTitle, jobUrl, json, tailorResult.match_score)
+      saveSession(
+        "tailored",
+        resolvedJobId,
+        jdText,
+        resolvedCompany,
+        resolvedTitle,
+        jobUrl,
+        pageTitle,
+        pageExcerpt,
+        metadataLines,
+        json,
+        tailorResult.match_score
+      )
     } catch (err) {
       debugError("Resume", "Tailor failed:", err)
       setError(err instanceof Error ? err.message : "Failed to tailor resume")
@@ -203,11 +385,104 @@ export default function Resume() {
     }
   }
 
-  function handleReset() {
-    setPhase("idle"); setJdText(""); setCompany(""); setJobTitle("")
-    setJobUrl(""); setTailoredJson(null); setMatchScore(0); setError("")
-    setStorage("resume_session", null)
+  function handleResumeChange(nextResume: ResumeJSON) {
+    setPersistenceState("draft")
+    setSaveTone("neutral")
+    setSaveMessage("")
+    setTailoredJson(nextResume)
   }
+
+  async function handleSaveDraft() {
+    setSavingDraft(true)
+    setSaveTone("neutral")
+    setSaveMessage("")
+    try {
+      const activeContext = normalizeActiveJobContext(await getStorage("active_job_context"))
+      if (!activeContext || activeContext.phase !== "tailored" || !activeContext.tailored_resume_json) {
+        setSaveTone("error")
+        setSaveMessage("Tailor the resume first before saving to the tracker.")
+        return
+      }
+
+      const client = await createApiClient()
+      const qaPairs: QAPairItem[] = activeContext.draft_qa_pairs.map((pair) => ({
+        field_id: pair.field_id,
+        question: pair.label,
+        answer: pair.answer,
+        field_type: pair.field_type,
+        edited_by_user: true
+      }))
+
+      const result = await client.saveApplicationDraft({
+        job_id: activeContext.job_id || undefined,
+        company: activeContext.company || "Unknown Company",
+        title: activeContext.job_title || "Unknown Position",
+        url: activeContext.job_url || undefined,
+        job_description: activeContext.job_description,
+        tailored_resume_json: activeContext.tailored_resume_json,
+        qa_pairs: qaPairs
+      })
+
+      const savedJobId = result.job.id
+      setJobId(savedJobId)
+      setPersistenceState("saved")
+      setCompany(result.job.company)
+      setJobTitle(result.job.title)
+      setSaveTone("success")
+      setSaveMessage(
+        result.qa_pairs.length > 0
+          ? `Saved to tracker with ${result.qa_pairs.length} reviewed answer${result.qa_pairs.length === 1 ? "" : "s"}.`
+          : "Saved to tracker."
+      )
+
+      await Promise.all([
+        setStorage("active_job_context", {
+          ...activeContext,
+          job_id: savedJobId,
+          company: result.job.company,
+          job_title: result.job.title,
+          persistence_state: "saved"
+        }),
+        setStorage("resume_session", {
+          phase,
+          jobId: savedJobId,
+          jdText,
+          company: result.job.company,
+          jobTitle: result.job.title,
+          jobUrl,
+          pageTitle,
+          pageExcerpt,
+          metadataLines,
+          tailoredJson: activeContext.tailored_resume_json,
+          matchScore
+        })
+      ])
+    } catch (err) {
+      debugError("Resume", "Save draft failed:", err)
+      setSaveTone("error")
+      setSaveMessage(err instanceof Error ? err.message : "Failed to save draft to tracker")
+    } finally {
+      setSavingDraft(false)
+    }
+  }
+
+  function handleReset() {
+    setPhase("idle"); setJobId(null); setJdText(""); setCompany(""); setJobTitle("")
+    setJobUrl(""); setPageTitle(""); setPageExcerpt(""); setMetadataLines([])
+    setTailoredJson(null); setMatchScore(0); setError("")
+    setPersistenceState("draft")
+    setSaveTone("neutral")
+    setSaveMessage("")
+    setStorage("resume_session", null)
+    setStorage("fillform_session", null)
+    setStorage("active_job_context", null)
+  }
+
+  const hasLocalEditsOnSavedJob = persistenceState === "draft" && Boolean(jobId)
+  const metadataWarning =
+    phase !== "idle" && !company.trim() && !jobTitle.trim()
+      ? "Page metadata is missing for this draft. Review the title and company carefully before saving."
+      : ""
 
   return (
     <div className="space-y-4">
@@ -215,6 +490,20 @@ export default function Resume() {
         <div className="flex items-start gap-2 text-red-600 bg-red-50 rounded-lg p-3">
           <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <p className="text-sm">{error}</p>
+        </div>
+      )}
+
+      {saveMessage && saveTone === "neutral" && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-100 bg-amber-50 p-3 text-amber-800">
+          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <p className="text-sm">{saveMessage}</p>
+        </div>
+      )}
+
+      {metadataWarning && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-100 bg-amber-50 p-3 text-amber-800">
+          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <p className="text-sm">{metadataWarning}</p>
         </div>
       )}
 
@@ -249,6 +538,9 @@ export default function Resume() {
               {company && <p className="text-xs text-text-muted">{company}</p>}
             </div>
           )}
+          <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            This is still a local draft. Nothing will be saved to your tracker until the explicit save step.
+          </div>
           <div className="card p-3 max-h-48 overflow-y-auto">
             <p className="text-xs text-text-secondary whitespace-pre-wrap">{jdText}</p>
           </div>
@@ -288,9 +580,39 @@ export default function Resume() {
               {company && <p className="text-xs text-text-muted">{company}</p>}
             </div>
           )}
-          <div className="card p-3 max-h-96 overflow-y-auto space-y-3">
-            <ResumePreview resume={tailoredJson} />
+          <div className="rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+            {hasLocalEditsOnSavedJob
+              ? "Recovered a saved application with new local edits. Save again to sync these changes back to the tracker."
+              : persistenceState === "saved"
+              ? "Saved to tracker. Any new edits here or in Fill Form will switch this back to an unsaved draft."
+              : "Unsaved draft. Review and edit this resume now; the tracker stays unchanged until you explicitly save later."}
           </div>
+          <div className="card p-3 max-h-96 overflow-y-auto space-y-3">
+            <ResumePreview resume={tailoredJson} onChange={handleResumeChange} />
+          </div>
+          <p className="text-xs text-text-muted text-center">Click any text to edit before downloading</p>
+          <button
+            onClick={handleSaveDraft}
+            disabled={savingDraft}
+            className="btn-primary w-full flex items-center justify-center gap-2">
+            {savingDraft ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {savingDraft
+              ? "Saving..."
+              : persistenceState === "saved"
+                ? "Save Updates to Tracker"
+                : "Save to Tracker"}
+          </button>
+          {saveMessage && (
+            <p className={`text-xs text-center ${
+              saveTone === "error"
+                ? "text-red-600"
+                : saveTone === "success"
+                  ? "text-green-700"
+                  : "text-text-muted"
+            }`}>
+              {saveMessage}
+            </p>
+          )}
           <div className="flex gap-2">
             <button onClick={handleCopy}
               className="btn-primary flex-1 flex items-center justify-center gap-2">
@@ -323,55 +645,174 @@ function CollapsibleSection({ title, children }: { title: string; children: Reac
   )
 }
 
-function ResumePreview({ resume }: { resume: ResumeJSON }) {
+function EditableText({ value, onChange, className, placeholder }: {
+  value: string; onChange: (v: string) => void; className?: string; placeholder?: string
+}) {
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className={`bg-transparent border-b border-transparent hover:border-border focus:border-primary focus:outline-none ${className || ""}`}
+      placeholder={placeholder}
+    />
+  )
+}
+
+function EditableTextarea({ value, onChange, className }: {
+  value: string; onChange: (v: string) => void; className?: string
+}) {
+  return (
+    <textarea
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      rows={2}
+      className={`bg-transparent border border-transparent hover:border-border focus:border-primary focus:outline-none w-full resize-none ${className || ""}`}
+    />
+  )
+}
+
+function ResumePreview({ resume, onChange }: { resume: ResumeJSON; onChange: (r: ResumeJSON) => void }) {
   const c = resume.contact
+
+  function updateContact(field: keyof ResumeContact, value: string) {
+    onChange({ ...resume, contact: { ...resume.contact, [field]: value } })
+  }
+
+  function updateSummary(value: string) {
+    onChange({ ...resume, summary: value })
+  }
+
+  function updateSkills(cat: "languages" | "frameworks" | "tools" | "other", value: string) {
+    const items = value.split(",").map(s => s.trim()).filter(Boolean)
+    onChange({ ...resume, skills: { ...resume.skills, [cat]: items.length ? items : undefined } })
+  }
+
+  function updateEntry(secIdx: number, entIdx: number, field: string, value: string) {
+    const sections = resume.sections.map((sec, si) => {
+      if (si !== secIdx) return sec
+      const entries = sec.entries.map((ent, ei) => {
+        if (ei !== entIdx) return ent
+        return { ...ent, [field]: value }
+      })
+      return { ...sec, entries }
+    })
+    onChange({ ...resume, sections })
+  }
+
+  function updateBullet(secIdx: number, entIdx: number, bulIdx: number, value: string) {
+    const sections = resume.sections.map((sec, si) => {
+      if (si !== secIdx) return sec
+      const entries = sec.entries.map((ent, ei) => {
+        if (ei !== entIdx) return ent
+        const bullets = ent.bullets.map((b, bi) => bi === bulIdx ? value : b)
+        return { ...ent, bullets }
+      })
+      return { ...sec, entries }
+    })
+    onChange({ ...resume, sections })
+  }
+
+  function removeBullet(secIdx: number, entIdx: number, bulIdx: number) {
+    const sections = resume.sections.map((sec, si) => {
+      if (si !== secIdx) return sec
+      const entries = sec.entries.map((ent, ei) => {
+        if (ei !== entIdx) return ent
+        return { ...ent, bullets: ent.bullets.filter((_, bi) => bi !== bulIdx) }
+      })
+      return { ...sec, entries }
+    })
+    onChange({ ...resume, sections })
+  }
+
+  function addBullet(secIdx: number, entIdx: number) {
+    const sections = resume.sections.map((sec, si) => {
+      if (si !== secIdx) return sec
+      const entries = sec.entries.map((ent, ei) => {
+        if (ei !== entIdx) return ent
+        return { ...ent, bullets: [...ent.bullets, ""] }
+      })
+      return { ...sec, entries }
+    })
+    onChange({ ...resume, sections })
+  }
+
   return (
     <>
-      <div className="text-center">
-        {c.name && <p className="text-sm font-bold text-text">{c.name}</p>}
-        <p className="text-xs text-text-muted">
-          {[c.email, c.phone, c.location].filter(Boolean).join("  •  ")}
-        </p>
-        {[c.linkedin, c.github, c.website].filter(Boolean).length > 0 && (
-          <p className="text-xs text-text-muted">
-            {[c.linkedin, c.github, c.website].filter(Boolean).join("  •  ")}
-          </p>
-        )}
+      <div className="text-center space-y-0.5">
+        <EditableText value={c.name || ""} onChange={v => updateContact("name", v)}
+          className="w-full text-sm font-bold text-text text-center" placeholder="Name" />
+        <div className="flex gap-1 justify-center flex-wrap">
+          <EditableText value={c.email || ""} onChange={v => updateContact("email", v)}
+            className="text-xs text-text-muted text-center w-auto max-w-[140px]" placeholder="Email" />
+          <EditableText value={c.phone || ""} onChange={v => updateContact("phone", v)}
+            className="text-xs text-text-muted text-center w-auto max-w-[100px]" placeholder="Phone" />
+          <EditableText value={c.location || ""} onChange={v => updateContact("location", v)}
+            className="text-xs text-text-muted text-center w-auto max-w-[120px]" placeholder="Location" />
+        </div>
       </div>
-      {resume.summary && (
+
+      {resume.summary != null && (
         <CollapsibleSection title="Summary">
-          <p className="text-xs text-text-secondary">{resume.summary}</p>
+          <EditableTextarea value={resume.summary || ""} onChange={updateSummary}
+            className="text-xs text-text-secondary" />
         </CollapsibleSection>
       )}
+
       {resume.skills && (
         <CollapsibleSection title="Skills">
           {([
-            ["Languages", resume.skills.languages], ["Frameworks", resume.skills.frameworks],
-            ["Tools", resume.skills.tools], ["Other", resume.skills.other]
-          ] as [string, string[] | undefined][])
-            .filter(([, v]) => v?.length)
-            .map(([cat, vals]) => (
-              <p key={cat} className="text-xs text-text-secondary">
-                <span className="font-semibold">{cat}:</span> {vals!.join(", ")}
-              </p>
+            ["languages", "Languages", resume.skills.languages],
+            ["frameworks", "Frameworks", resume.skills.frameworks],
+            ["tools", "Tools", resume.skills.tools],
+            ["other", "Other", resume.skills.other],
+          ] as [keyof ResumeSkills, string, string[] | undefined][])
+            .filter(([, , v]) => v?.length)
+            .map(([key, label, vals]) => (
+              <div key={key} className="flex items-baseline gap-1">
+                <span className="text-xs font-semibold text-text-secondary flex-shrink-0">{label}:</span>
+                <EditableText value={vals!.join(", ")} onChange={v => updateSkills(key, v)}
+                  className="flex-1 min-w-0 text-xs text-text-secondary" />
+              </div>
             ))}
         </CollapsibleSection>
       )}
+
       {resume.sections.map((sec, i) => (
         <CollapsibleSection key={i} title={sec.title}>
           {sec.entries.map((entry, j) => (
             <div key={j} className="mb-2">
-              <div className="flex justify-between items-baseline">
-                {entry.heading && <p className="text-xs font-semibold text-text">{entry.heading}</p>}
-                {entry.dates && <p className="text-xs text-text-muted flex-shrink-0 ml-2">{entry.dates}</p>}
+              <div className="flex justify-between items-baseline gap-1">
+                <EditableText value={entry.heading} onChange={v => updateEntry(i, j, "heading", v)}
+                  className="text-xs font-semibold text-text flex-1 min-w-0" placeholder="Company / Organization" />
+                {entry.dates != null && entry.dates !== "" && (
+                  <EditableText value={entry.dates} onChange={v => updateEntry(i, j, "dates", v)}
+                    className="w-[110px] flex-none text-xs text-text-muted text-right" placeholder="Dates" />
+                )}
               </div>
-              <div className="flex justify-between items-baseline">
-                {entry.subheading && <p className="text-xs text-text-muted italic">{entry.subheading}</p>}
-                {entry.location && <p className="text-xs text-text-muted flex-shrink-0 ml-2">{entry.location}</p>}
+              <div className="flex justify-between items-baseline gap-1">
+                <EditableText value={entry.subheading || ""} onChange={v => updateEntry(i, j, "subheading", v)}
+                  className="text-xs text-text-muted italic flex-1 min-w-0" placeholder="Role / Title" />
+                {entry.location != null && entry.location !== "" && (
+                  <EditableText value={entry.location} onChange={v => updateEntry(i, j, "location", v)}
+                    className="w-[110px] flex-none text-xs text-text-muted text-right" placeholder="Location" />
+                )}
               </div>
               {entry.bullets.map((b, k) => (
-                <p key={k} className="text-xs text-text-secondary ml-2">• {b}</p>
+                <div key={k} className="flex items-start gap-1 group ml-2">
+                  <span className="text-xs text-text-secondary mt-0.5">•</span>
+                  <EditableText value={b} onChange={v => updateBullet(i, j, k, v)}
+                    className="text-xs text-text-secondary flex-1" />
+                  <button onClick={() => removeBullet(i, j, k)}
+                    className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 flex-shrink-0 cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
               ))}
+              <button onClick={() => addBullet(i, j)}
+                className="text-xs text-primary hover:text-primary-dark flex items-center gap-0.5 ml-2 mt-0.5 cursor-pointer">
+                <Plus className="w-3 h-3" /> Add bullet
+              </button>
             </div>
           ))}
         </CollapsibleSection>

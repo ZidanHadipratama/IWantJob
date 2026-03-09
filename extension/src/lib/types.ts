@@ -14,8 +14,10 @@ export interface ExtractJDResponse {
   success: boolean
   url: string
   text: string
+  page_title?: string
   company?: string
   job_title?: string
+  metadata_lines?: string[]
   readability_title?: string
   readability_excerpt?: string
   readability_siteName?: string

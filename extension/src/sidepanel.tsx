@@ -7,12 +7,13 @@ import FillForm from "./components/sidepanel/FillForm"
 import Resume from "./components/sidepanel/Resume"
 import TrackerTable from "./components/sidepanel/TrackerTable"
 import { debug } from "~lib/debug"
+import { getStorage, normalizeActiveJobContext, type ActiveJobContext } from "~lib/storage"
 
 type Tab = "fill-form" | "resume" | "tracker" | "debug"
 
 const tabs: { id: Tab; label: string; icon: typeof ClipboardList }[] = [
-  { id: "fill-form", label: "Fill Form", icon: ClipboardList },
   { id: "resume", label: "Resume", icon: FileText },
+  { id: "fill-form", label: "Fill Form", icon: ClipboardList },
   { id: "tracker", label: "Tracker", icon: LayoutGrid },
   { id: "debug", label: "Logs", icon: Bug },
 ]
@@ -68,11 +69,46 @@ function DebugPanel() {
 }
 
 function SidePanel() {
+  const [context, setContext] = useState<ActiveJobContext | null>(null)
+
   useEffect(() => {
     debug("SidePanel", "Mounted")
+
+    let mounted = true
+    getStorage("active_job_context").then((value) => {
+      if (mounted) setContext(normalizeActiveJobContext(value))
+    })
+
+    function handleStorageChange(
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: string
+    ) {
+      if (areaName !== "local" || !changes.active_job_context) return
+      setContext(normalizeActiveJobContext(changes.active_job_context.newValue))
+    }
+
+    chrome.storage.onChanged.addListener(handleStorageChange)
+    return () => {
+      mounted = false
+      chrome.storage.onChanged.removeListener(handleStorageChange)
+    }
   }, [])
 
-  const [activeTab, setActiveTab] = useState<Tab>("fill-form")
+  const [activeTab, setActiveTab] = useState<Tab>("resume")
+  const statusTone = !context
+    ? "border-slate-200 bg-slate-50 text-text-muted"
+    : context.phase !== "tailored"
+      ? "border-amber-100 bg-amber-50 text-amber-800"
+      : context.persistence_state === "saved"
+        ? "border-emerald-100 bg-emerald-50 text-emerald-800"
+        : "border-sky-100 bg-sky-50 text-sky-800"
+  const statusMessage = !context
+    ? "No active application draft yet."
+    : context.phase !== "tailored"
+      ? "Draft in progress. Resume tailoring is not finished yet."
+      : context.persistence_state === "saved"
+        ? `Saved application: ${context.job_title || "current role"}${context.company ? ` at ${context.company}` : ""}`
+        : `Unsaved draft: ${context.job_title || "current role"}${context.company ? ` at ${context.company}` : ""}`
 
   return (
     <div className="flex flex-col h-screen bg-surface-secondary">
@@ -96,6 +132,9 @@ function SidePanel() {
           )
         })}
       </nav>
+      <div className={`border-b px-4 py-2 text-[11px] font-medium ${statusTone}`}>
+        {statusMessage}
+      </div>
       <main className="flex-1 overflow-auto p-4">
         {activeTab === "fill-form" && <FillForm />}
         {activeTab === "resume" && <Resume />}
