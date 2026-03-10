@@ -349,6 +349,84 @@ async def test_save_application_draft_persists_job_resume_and_qa():
     mock_db.upsert_qa_pairs.assert_called_once()
 
 
+@pytest.mark.asyncio
+async def test_fill_form_prompt_includes_persona_text_when_present():
+    transport = ASGITransport(app=app)
+    mock_ai = MagicMock()
+    mock_ai.json_completion = AsyncMock(return_value=[
+        {
+            "field_id": "why",
+            "label": "Why do you want this role?",
+            "answer": "Because it aligns with my principles.",
+            "field_type": "textarea",
+        }
+    ])
+    mock_db = MagicMock()
+
+    with patch("app.routers.form.AIService", return_value=mock_ai), patch(
+        "app.routers.form.DBService", return_value=mock_db
+    ), patch("app.dependencies.create_client", return_value=MagicMock()):
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/fill-form",
+                json={
+                    "form_fields": [
+                        {
+                            "field_id": "why",
+                            "label": "Why do you want this role?",
+                            "type": "textarea",
+                        }
+                    ],
+                    "resume_text": "Python engineer with production backend experience.",
+                    "persona_text": "I care about calm execution, ownership, and clear communication.",
+                    "job_description": "Remote AI product role",
+                },
+                headers=BASE_HEADERS
+                | {
+                    "X-AI-Provider": "openai",
+                    "X-AI-Key": "sk-test",
+                    "X-AI-Model": "gpt-4o-mini",
+                },
+            )
+
+    assert response.status_code == 200
+    prompt_call = mock_ai.json_completion.await_args.kwargs["user_message"]
+    assert "Persona Context:" in prompt_call
+    assert "I care about calm execution, ownership, and clear communication." in prompt_call
+    assert "Do not turn persona context into unsupported factual claims" in prompt_call
+
+
+@pytest.mark.asyncio
+async def test_fill_form_prompt_uses_not_provided_when_persona_missing():
+    transport = ASGITransport(app=app)
+    mock_ai = MagicMock()
+    mock_ai.json_completion = AsyncMock(return_value=[])
+    mock_db = MagicMock()
+
+    with patch("app.routers.form.AIService", return_value=mock_ai), patch(
+        "app.routers.form.DBService", return_value=mock_db
+    ), patch("app.dependencies.create_client", return_value=MagicMock()):
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/fill-form",
+                json={
+                    "form_fields": [],
+                    "resume_text": "Python engineer with production backend experience.",
+                },
+                headers=BASE_HEADERS
+                | {
+                    "X-AI-Provider": "openai",
+                    "X-AI-Key": "sk-test",
+                    "X-AI-Model": "gpt-4o-mini",
+                },
+            )
+
+    assert response.status_code == 200
+    prompt_call = mock_ai.json_completion.await_args.kwargs["user_message"]
+    assert "Persona Context:" in prompt_call
+    assert "Not provided" in prompt_call
+
+
 # ── Test 7: POST /save-qa with empty qa_pairs returns 400 ──────────────────
 
 

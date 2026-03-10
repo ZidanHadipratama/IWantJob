@@ -140,6 +140,7 @@ export interface ApiClient {
     form_fields: object[]
     resume_text?: string
     resume_json?: object
+    persona_text?: string
     job_id?: string
     job_description?: string
   }): Promise<{ answers: object[]; job_id?: string; qa_saved: boolean }>

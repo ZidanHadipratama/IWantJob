@@ -79,6 +79,7 @@ async def fill_form(
         prompt_template
         .replace("{resume}", resume_text)
         .replace("{user_profile}", profile_str)
+        .replace("{persona_text}", body.persona_text or "Not provided")
         .replace("{job_description}", body.job_description or "Not provided")
         .replace("{form_fields}", json.dumps(body.form_fields, indent=2))
     )

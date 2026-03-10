@@ -208,6 +208,29 @@ The product currently expects a Bring-Your-Own setup:
 - your Supabase project
 - your AI credentials
 
+### 6. Run Playwright smoke tests
+
+From `extension/`:
+
+```bash
+npx playwright install chromium
+npm run test:e2e
+```
+
+The Playwright run will build the extension automatically, load the unpacked MV3 build into Chromium, and smoke-test the popup, sidepanel, and options page.
+
+If you want a visible browser window:
+
+```bash
+npm run test:e2e:headed
+```
+
+On WSL, headed mode requires GUI support such as WSLg or an X server with `DISPLAY` configured. If Linux browser dependencies are missing, run:
+
+```bash
+npx playwright install --with-deps chromium
+```
+
 ## How To Use
 
 ### Initial bootstrap

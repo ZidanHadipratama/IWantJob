@@ -7,6 +7,7 @@ import { BackendConfigCard } from "~components/options/BackendConfigCard"
 import { SupabaseConfigCard } from "~components/options/SupabaseConfigCard"
 import { AIConfigCard } from "~components/options/AIConfigCard"
 import { ResumeUploadCard } from "~components/options/ResumeUploadCard"
+import { PersonaCard } from "~components/options/PersonaCard"
 import JobTracker from "~components/options/JobTracker"
 import JobDetail from "~components/options/JobDetail"
 import { getOrCreateUserId } from "~lib/storage"
@@ -127,6 +128,7 @@ function Options() {
               <SupabaseConfigCard onStatusChange={updateSection("database")} />
               <AIConfigCard onStatusChange={updateSection("ai")} />
               <ResumeUploadCard onConfigChange={(configured) => updateSection("resume")(configured ? "healthy" : "missing")} />
+              <PersonaCard />
             </div>
 
             <p className="text-center text-xs text-text-muted mt-8">

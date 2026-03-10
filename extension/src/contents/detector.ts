@@ -55,6 +55,7 @@ function pruneForReadability(doc: Document) {
 
 function normalizeInlineText(text: string): string {
   return text
+    .replace(/SVGs not supported by this browser\./gi, " ")
     .replace(/\u00a0/g, " ")
     .replace(/\s+/g, " ")
     .replace(/\s+([:;,.!?])/g, "$1")
@@ -296,6 +297,90 @@ function extractJobTitle(): string | undefined {
 const SKIP_TYPES = new Set(["hidden", "submit", "button", "image", "reset"])
 const GENERIC_PLACEHOLDER_RE =
   /^(start typing|type here|enter here|your answer|answer here|write here|select|choose|search|optional|type here\.\.\.|start typing\.\.\.)$/i
+const AI_OPTION_SKIP_THRESHOLD = 10
+const PHONE_FIELD_RE = /(phone|mobile|tel|whatsapp|contact[-_ ]?number)/i
+const SELECT_LIKE_PLACEHOLDER_RE = /^select an option/i
+
+function looksLikeOptionBlob(text: string): boolean {
+  const normalized = normalizeInlineText(text)
+  if (!normalized) return false
+  if (normalized.length > 220) return true
+  if ((normalized.match(/\+\d{1,3}/g) || []).length >= 5) return true
+  if ((normalized.match(/[A-Z][a-z]+(?: [A-Z][a-z]+)?\+\d{1,3}/g) || []).length >= 4) return true
+  if ((normalized.match(/[A-Z][a-z]+(?: [A-Z][a-z]+)?/g) || []).length >= 20 && normalized.includes("+")) return true
+  return false
+}
+
+function looksLikePhoneField(el: HTMLElement, fieldId: string, label: string): boolean {
+  const input = el instanceof HTMLInputElement ? el : null
+  const candidates = [
+    fieldId,
+    el.getAttribute("name") || "",
+    input?.type || "",
+    label
+  ].join(" ")
+
+  return PHONE_FIELD_RE.test(candidates)
+}
+
+function sanitizeFieldLabel(el: HTMLElement, fieldId: string, fieldType: FormField["type"], rawLabel: string): {
+  label: string
+  aiSkipReason?: string
+  aiSkipKind?: FormField["ai_skip_kind"]
+} {
+  const label = normalizeInlineText(rawLabel)
+
+  if (!label) {
+    return { label: "" }
+  }
+
+  if (looksLikeOptionBlob(label)) {
+    if (looksLikePhoneField(el, fieldId, label)) {
+      return {
+        label: "Phone",
+        aiSkipReason: "Composite phone field with country picker; complete manually",
+        aiSkipKind: "composite-phone"
+      }
+    }
+
+    if (fieldType === "select" || fieldType === "radio" || fieldType === "checkbox") {
+      return {
+        label: label.slice(0, 120),
+        aiSkipReason: "Noisy field label; complete manually",
+        aiSkipKind: "noisy-label"
+      }
+    }
+  }
+
+  if (label.length > 240) {
+    return {
+      label: label.slice(0, 120),
+      aiSkipReason: "Field label is too large for one AI pass",
+      aiSkipKind: "label-too-large"
+    }
+  }
+
+  return { label }
+}
+
+function dedupeOptions(options: Array<FormFieldOption | null | undefined>): FormFieldOption[] {
+  const seen = new Set<string>()
+  const deduped: FormFieldOption[] = []
+
+  for (const option of options) {
+    if (!option) continue
+    const key = `${normalizeInlineText(option.label || "")}::${option.value || ""}`
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    deduped.push(option)
+  }
+
+  return deduped
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
 
 function getUniqueAttributeSelector(el: HTMLElement): string | null {
   const tag = el.tagName.toLowerCase()
@@ -366,7 +451,102 @@ function buildOption(label: string, value: string | null | undefined, el: HTMLEl
   }
 }
 
-function extractFormFields(): FormField[] {
+function isVisibleElement(el: Element | null): el is HTMLElement {
+  return Boolean(el instanceof HTMLElement && (el.offsetParent || el.getClientRects().length))
+}
+
+function isComboboxLikeInput(el: HTMLElement): boolean {
+  if (!(el instanceof HTMLInputElement)) return false
+  if (el.type && el.type !== "text" && el.type !== "search") return false
+
+  const placeholder = normalizeInlineText(el.placeholder || "")
+  const role = el.getAttribute("role") || ""
+  const ariaAutocomplete = el.getAttribute("aria-autocomplete") || ""
+  const ariaHasPopup = el.getAttribute("aria-haspopup") || ""
+  const hasInputIdPattern = /^input_.+_input$/.test(el.id || "")
+
+  return (
+    SELECT_LIKE_PLACEHOLDER_RE.test(placeholder) ||
+    role === "combobox" ||
+    ariaAutocomplete === "list" ||
+    ariaHasPopup === "listbox" ||
+    hasInputIdPattern
+  )
+}
+
+function findComboboxBackingInput(el: HTMLInputElement): HTMLInputElement | null {
+  const derivedName =
+    el.id.startsWith("input_") && el.id.endsWith("_input")
+      ? el.id.slice("input_".length, -"_input".length)
+      : ""
+
+  if (derivedName) {
+    const derived = document.querySelector<HTMLInputElement>(`input[name="${CSS.escape(derivedName)}"]`)
+    if (derived && derived !== el) return derived
+  }
+
+  const container = el.closest("[data-ui], label, div, fieldset") || el.parentElement
+  if (container) {
+    const nearby = Array.from(container.querySelectorAll<HTMLInputElement>("input"))
+      .find((candidate) => candidate !== el && Boolean(candidate.name))
+    if (nearby) return nearby
+  }
+
+  return null
+}
+
+function getComboboxOptionNodes(el: HTMLInputElement): HTMLElement[] {
+  const controlledIds = [
+    el.getAttribute("aria-controls") || "",
+    el.getAttribute("aria-owns") || ""
+  ].filter(Boolean)
+
+  for (const id of controlledIds) {
+    const target = document.getElementById(id)
+    if (!target) continue
+    const nodes = Array.from(target.querySelectorAll<HTMLElement>("[role='option'], li, [data-option-index]"))
+      .filter((node) => isVisibleElement(node))
+    if (nodes.length > 0) return nodes
+  }
+
+  const visibleListboxes = Array.from(document.querySelectorAll<HTMLElement>("[role='listbox']"))
+    .filter((node) => isVisibleElement(node))
+
+  for (const listbox of visibleListboxes) {
+    const nodes = Array.from(listbox.querySelectorAll<HTMLElement>("[role='option'], li, [data-option-index]"))
+      .filter((node) => isVisibleElement(node))
+    if (nodes.length > 0) return nodes
+  }
+
+  return Array.from(document.querySelectorAll<HTMLElement>("[role='option']"))
+    .filter((node) => isVisibleElement(node))
+}
+
+async function collectComboboxOptions(el: HTMLInputElement): Promise<FormFieldOption[]> {
+  el.focus()
+  el.click()
+  el.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))
+
+  for (const waitMs of [80, 180, 320]) {
+    await delay(waitMs)
+    const nodes = getComboboxOptionNodes(el)
+    const options = dedupeOptions(
+      nodes.map((node) => buildOption(node.textContent || "", node.getAttribute("data-value"), node))
+    )
+      .filter((option) => option.label)
+      .filter((option) => !/^(select an option|no options|loading)$/i.test(option.label))
+
+    if (options.length > 0) {
+      el.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+      return options
+    }
+  }
+
+  el.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+  return []
+}
+
+async function extractFormFields(): Promise<FormField[]> {
   const fields: FormField[] = []
   const seen = new Set<string>()
   const seenRadioNames = new Set<string>()
@@ -389,14 +569,19 @@ function extractFormFields(): FormField[] {
     if (seen.has(fieldId)) continue
     seen.add(fieldId)
 
-    const label = findLabel(el)
-    if (!label) continue
+    const rawLabel = findLabel(el)
+    if (!rawLabel) continue
+
+    const initialType = getFieldType(el)
+    const comboboxBackingInput = initialType === "combobox" && el instanceof HTMLInputElement
+      ? findComboboxBackingInput(el)
+      : null
 
     const field: FormField = {
       field_id: fieldId,
-      label,
-      name: el.name || "",
-      type: getFieldType(el),
+      label: "",
+      name: comboboxBackingInput?.name || el.name || "",
+      type: initialType,
       required: el.required || el.getAttribute("aria-required") === "true",
       selector: buildElementSelector(el),
       input_type: el instanceof HTMLInputElement ? el.type || "text" : undefined
@@ -406,13 +591,31 @@ function extractFormFields(): FormField[] {
       field.placeholder = el.placeholder
     }
 
-    if (isPlaceholderOnlyJunkField(el, label, field.field_id)) continue
+    if (isPlaceholderOnlyJunkField(el, rawLabel, field.field_id)) continue
+
+    const sanitized = sanitizeFieldLabel(el, field.field_id, field.type, rawLabel)
+    if (!sanitized.label) continue
+    field.label = sanitized.label
+    if (sanitized.aiSkipReason) {
+      field.ai_skip_reason = sanitized.aiSkipReason
+      if (sanitized.aiSkipKind) {
+        field.ai_skip_kind = sanitized.aiSkipKind
+      }
+    }
 
     if (el instanceof HTMLSelectElement) {
-      field.options = Array.from(el.options)
+      field.options = dedupeOptions(Array.from(el.options)
         .map((option) => buildOption(option.text.trim(), option.value, el))
         .filter((option): option is FormFieldOption => Boolean(option))
-        .filter((option) => option.label && option.label !== "Select..." && option.label !== "Choose..." && option.label !== "--")
+        .filter((option) => option.label && option.label !== "Select..." && option.label !== "Choose..." && option.label !== "--"))
+    }
+
+    if (field.type === "combobox" && el instanceof HTMLInputElement) {
+      field.options = await collectComboboxOptions(el)
+      if (!field.options.length) {
+        field.ai_skip_reason = "Custom combobox options could not be extracted; complete manually"
+        field.ai_skip_kind = "unsupported-combobox"
+      }
     }
 
     if (el instanceof HTMLInputElement && (el.type === "radio" || el.type === "checkbox")) {
@@ -424,10 +627,10 @@ function extractFormFields(): FormField[] {
 
       if (el.type === "radio") {
         const radios = document.querySelectorAll<HTMLInputElement>(`input[name="${el.name}"]`)
-        field.options = Array.from(radios).map(r => {
+        field.options = dedupeOptions(Array.from(radios).map(r => {
           const radioLabel = findLabel(r)
           return buildOption(radioLabel || r.value, r.value, r)
-        }).filter((option): option is FormFieldOption => Boolean(option))
+        }).filter((option): option is FormFieldOption => Boolean(option)))
       }
 
       if (el.type === "checkbox") {
@@ -436,10 +639,10 @@ function extractFormFields(): FormField[] {
         for (let i = 0; i < 6 && container; i++) {
           const checkboxes = container.querySelectorAll<HTMLInputElement>("input[type='checkbox']")
           if (checkboxes.length > 1) {
-            field.options = Array.from(checkboxes).map(cb => {
+            field.options = dedupeOptions(Array.from(checkboxes).map(cb => {
               const cbLabel = findLabel(cb)
               return buildOption(cbLabel || cb.value, cb.value, cb)
-            }).filter((option): option is FormFieldOption => Boolean(option))
+            }).filter((option): option is FormFieldOption => Boolean(option)))
             // Mark all sibling checkboxes as seen so we don't duplicate
             checkboxes.forEach(cb => {
               const cbId = cb.id || cb.name || ""
@@ -452,6 +655,20 @@ function extractFormFields(): FormField[] {
       }
     }
 
+    if (
+      !field.ai_skip_reason &&
+      (field.type === "select" || field.type === "combobox" || field.type === "radio" || field.type === "checkbox") &&
+      (field.options?.length || 0) > AI_OPTION_SKIP_THRESHOLD
+    ) {
+      field.ai_skip_reason = `Too many options (${field.options?.length || 0}) for one AI pass`
+      field.ai_skip_kind = "oversized-options"
+    }
+
+    if (field.type === "file" && !field.ai_skip_reason) {
+      field.ai_skip_reason = "Handled during autofill"
+      field.ai_skip_kind = "file-upload"
+    }
+
     fields.push(field)
   }
 
@@ -461,8 +678,8 @@ function extractFormFields(): FormField[] {
 /** Get clean text from an element, stripping SVGs and form controls */
 function cleanText(el: Element): string {
   const clone = el.cloneNode(true) as HTMLElement
-  clone.querySelectorAll("svg, input, textarea, select").forEach(c => c.remove())
-  return clone.textContent?.trim() || ""
+  clone.querySelectorAll("svg, img, input, textarea, select").forEach(c => c.remove())
+  return normalizeInlineText(clone.textContent || "")
 }
 
 function findLabel(el: HTMLElement): string {
@@ -567,6 +784,7 @@ function getFieldType(el: HTMLElement): FormField["type"] {
   if (el instanceof HTMLTextAreaElement) return "textarea"
   if (el instanceof HTMLSelectElement) return "select"
   if (el instanceof HTMLInputElement) {
+    if (isComboboxLikeInput(el)) return "combobox"
     if (el.type === "file") return "file"
     if (el.type === "checkbox") return "checkbox"
     if (el.type === "radio") return "radio"
@@ -633,6 +851,38 @@ function dispatchValueEvents(el: HTMLElement) {
   el.dispatchEvent(new Event("change", { bubbles: true }))
 }
 
+function verifyTextValue(
+  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+  expectedValue: string
+): boolean {
+  return normalizeInlineText(element.value) === normalizeInlineText(expectedValue)
+}
+
+function clickAssociatedControl(input: HTMLInputElement) {
+  const explicitLabel =
+    input.id ? document.querySelector(`label[for="${CSS.escape(input.id)}"]`) : null
+  const label = explicitLabel instanceof HTMLElement
+    ? explicitLabel
+    : input.closest("label")
+
+  if (label instanceof HTMLElement) {
+    label.click()
+    return
+  }
+
+  input.click()
+}
+
+function resolveOptionNode(option: FormFieldOption): HTMLElement | null {
+  if (!option.selector) return null
+  try {
+    const el = document.querySelector(option.selector)
+    return el instanceof HTMLElement ? el : null
+  } catch {
+    return null
+  }
+}
+
 function setCheckedState(el: HTMLInputElement, checked: boolean) {
   const setter = getCheckedSetter(el)
   if (!setter) {
@@ -696,6 +946,58 @@ function resolveOptionElement(option: FormFieldOption): HTMLInputElement | null 
   }
 }
 
+function findInputOptionForField(
+  field: FormField,
+  option: FormFieldOption,
+  expectedType: "radio" | "checkbox"
+): HTMLInputElement | null {
+  const direct = resolveOptionElement(option)
+  if (direct && direct.type === expectedType) {
+    return direct
+  }
+
+  const candidates = field.name
+    ? Array.from(
+        document.querySelectorAll<HTMLInputElement>(
+          `input[type="${expectedType}"][name="${CSS.escape(field.name)}"]`
+        )
+      )
+    : []
+
+  for (const candidate of candidates) {
+    const candidateLabel = findLabel(candidate) || candidate.value || ""
+    const candidateOption = buildOption(candidateLabel, candidate.value, candidate)
+    if (!candidateOption) continue
+
+    if (optionMatches(candidateOption, option.label || option.value || "")) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
+function verifyComboboxSelection(
+  field: FormField,
+  input: HTMLInputElement,
+  option: FormFieldOption
+): boolean {
+  const visibleValue = normalizeInlineText(input.value)
+  if (visibleValue && optionMatches({ label: visibleValue, value: visibleValue }, option.label || option.value || "")) {
+    return true
+  }
+
+  if (field.name) {
+    const backing = document.querySelector<HTMLInputElement>(`input[name="${CSS.escape(field.name)}"]`)
+    const backingValue = normalizeInlineText(backing?.value || "")
+    if (backingValue && optionMatches({ label: backingValue, value: backingValue }, option.label || option.value || "")) {
+      return true
+    }
+  }
+
+  return false
+}
+
 function interpretBooleanAnswer(answer: string): boolean | null {
   const normalized = normalizeChoice(answer)
   if (!normalized) return null
@@ -711,7 +1013,7 @@ function interpretBooleanAnswer(answer: string): boolean | null {
   return null
 }
 
-function autofillField(field: FormField, answer: string): AutofillResultItem {
+async function autofillField(field: FormField, answer: string): Promise<AutofillResultItem> {
   const trimmedAnswer = answer.trim()
   const resultBase = {
     field_id: field.field_id,
@@ -732,8 +1034,12 @@ function autofillField(field: FormField, answer: string): AutofillResultItem {
       if (!(element instanceof HTMLInputElement)) {
         return { ...resultBase, status: "failed", reason: "Target is not a text input" }
       }
+
       setNativeValue(element, trimmedAnswer)
       dispatchValueEvents(element)
+      if (!verifyTextValue(element, trimmedAnswer)) {
+        return { ...resultBase, status: "failed", reason: "Input value did not stick after autofill" }
+      }
       return { ...resultBase, status: "filled" }
     }
 
@@ -743,6 +1049,9 @@ function autofillField(field: FormField, answer: string): AutofillResultItem {
       }
       setNativeValue(element, trimmedAnswer)
       dispatchValueEvents(element)
+      if (!verifyTextValue(element, trimmedAnswer)) {
+        return { ...resultBase, status: "failed", reason: "Textarea value did not stick after autofill" }
+      }
       return { ...resultBase, status: "filled" }
     }
 
@@ -758,7 +1067,59 @@ function autofillField(field: FormField, answer: string): AutofillResultItem {
 
       element.value = option.value || option.label
       dispatchValueEvents(element)
+      if (!verifyTextValue(element, option.value || option.label)) {
+        return { ...resultBase, status: "failed", reason: "Select value did not stick after autofill" }
+      }
       return { ...resultBase, status: "filled" }
+    }
+
+    if (field.type === "combobox") {
+      if (!(element instanceof HTMLInputElement)) {
+        return { ...resultBase, status: "failed", reason: "Target is not a combobox input" }
+      }
+
+      const option = findMatchingOption(field, trimmedAnswer)
+      if (!option) {
+        return { ...resultBase, status: "skipped", reason: "No matching combobox option" }
+      }
+
+      element.focus()
+      element.click()
+      element.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))
+
+      for (const waitMs of [80, 180, 320]) {
+        await delay(waitMs)
+        const optionNode = resolveOptionNode(option)
+        if (optionNode) {
+          optionNode.click()
+          await delay(80)
+          if (verifyComboboxSelection(field, element, option)) {
+            return { ...resultBase, status: "filled" }
+          }
+        }
+
+        const liveOptions = getComboboxOptionNodes(element)
+        const liveMatch = liveOptions.find((node) =>
+          optionMatches(
+            {
+              label: normalizeInlineText(node.textContent || ""),
+              value: node.getAttribute("data-value") || undefined
+            },
+            option.label || option.value || ""
+          )
+        )
+
+        if (liveMatch) {
+          liveMatch.click()
+          await delay(80)
+          if (verifyComboboxSelection(field, element, option)) {
+            return { ...resultBase, status: "filled" }
+          }
+        }
+      }
+
+      element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+      return { ...resultBase, status: "failed", reason: "Combobox option did not stick after autofill" }
     }
 
     if (field.type === "radio") {
@@ -767,12 +1128,18 @@ function autofillField(field: FormField, answer: string): AutofillResultItem {
         return { ...resultBase, status: "skipped", reason: "No matching radio option" }
       }
 
-      const radio = resolveOptionElement(option)
+      const radio = findInputOptionForField(field, option, "radio")
       if (!radio) {
         return { ...resultBase, status: "failed", reason: "Radio option not found on page" }
       }
 
-      setCheckedState(radio, true)
+      clickAssociatedControl(radio)
+      if (!radio.checked) {
+        setCheckedState(radio, true)
+      }
+      if (!radio.checked) {
+        return { ...resultBase, status: "failed", reason: "Radio option did not stay selected" }
+      }
       return { ...resultBase, status: "filled" }
     }
 
@@ -785,7 +1152,15 @@ function autofillField(field: FormField, answer: string): AutofillResultItem {
         if (boolAnswer === null) {
           return { ...resultBase, status: "skipped", reason: "Checkbox answer is not yes/no" }
         }
-        setCheckedState(checkbox, boolAnswer)
+        if (checkbox.checked !== boolAnswer) {
+          clickAssociatedControl(checkbox)
+        }
+        if (checkbox.checked !== boolAnswer) {
+          setCheckedState(checkbox, boolAnswer)
+        }
+        if (checkbox.checked !== boolAnswer) {
+          return { ...resultBase, status: "failed", reason: "Checkbox state did not stick after autofill" }
+        }
         return { ...resultBase, status: "filled" }
       }
 
@@ -798,9 +1173,15 @@ function autofillField(field: FormField, answer: string): AutofillResultItem {
       for (const selection of selections) {
         const option = findMatchingOption(field, selection)
         if (!option) continue
-        const target = resolveOptionElement(option)
+        const target = findInputOptionForField(field, option, "checkbox")
         if (!target) continue
-        setCheckedState(target, true)
+        clickAssociatedControl(target)
+        if (!target.checked) {
+          setCheckedState(target, true)
+        }
+        if (!target.checked) {
+          continue
+        }
         filled += 1
       }
 
@@ -868,30 +1249,33 @@ function uploadResumeToFileField(
   }
 }
 
-function autofillForm(
+async function autofillForm(
   fields: FormField[],
   answers: AutofillAnswerInput[],
   resumeFile?: AutofillResumeFilePayload
-): AutofillResultItem[] {
+): Promise<AutofillResultItem[]> {
   const answerMap = new Map(answers.map((answer) => [answer.field_id, answer]))
+  const results: AutofillResultItem[] = []
 
-  return fields
-    .map((field) => {
-      if (field.type === "file") {
-        return uploadResumeToFileField(field, resumeFile)
-      }
-      const answer = answerMap.get(field.field_id)
-      if (!answer) return null
-      return autofillField(field, answer.answer)
-    })
-    .filter((item): item is AutofillResultItem => Boolean(item))
+  for (const field of fields) {
+    if (field.type === "file") {
+      results.push(uploadResumeToFileField(field, resumeFile))
+      continue
+    }
+
+    const answer = answerMap.get(field.field_id)
+    if (!answer) continue
+    results.push(await autofillField(field, answer.answer))
+  }
+
+  return results
 }
 
 // ── Message Handler ──────────────────────────────────────────────────────
 // Side panel sends messages, content script responds with extracted data.
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  try {
+  void (async () => {
     if (msg.type === "EXTRACT_JD") {
       const result = extractJD()
       sendResponse({
@@ -899,15 +1283,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         url: window.location.href,
         ...result
       })
+      return
     }
 
     if (msg.type === "EXTRACT_FORM") {
-      const fields = extractFormFields()
+      const fields = await extractFormFields()
       sendResponse({
         success: true,
         url: window.location.href,
         fields
       })
+      return
     }
 
     if (msg.type === "AUTOFILL_FORM") {
@@ -917,21 +1303,27 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         msg.resume_file && typeof msg.resume_file === "object"
           ? msg.resume_file as AutofillResumeFilePayload
           : undefined
-      const results = autofillForm(fields, answers, resumeFile)
+      const results = await autofillForm(fields, answers, resumeFile)
       sendResponse({
         success: true,
         url: window.location.href,
         results
       })
+      return
     }
-  } catch (error) {
+
+    sendResponse({
+      success: false,
+      url: window.location.href,
+      error: "Unsupported content-script message"
+    })
+  })().catch((error) => {
     sendResponse({
       success: false,
       url: window.location.href,
       error: error instanceof Error ? error.message : "Content script autofill failed"
     })
-  }
+  })
 
-  // Return true to keep the message channel open for async response
   return true
 })

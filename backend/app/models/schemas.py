@@ -101,6 +101,7 @@ class FillFormRequest(BaseModel):
     form_fields: list[dict]
     resume_text: Optional[str] = None
     resume_json: Optional[ResumeJSON] = None
+    persona_text: Optional[str] = None
     user_profile: Optional[UserProfile] = None
     job_id: Optional[UUID] = None
     job_description: Optional[str] = None

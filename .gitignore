@@ -26,6 +26,10 @@ extension/tsconfig.tsbuildinfo
 # Debug
 debugImage/
 *.log
+extension/playwright-report/
+extension/test-results/
+playwright-report/
+test-results/
 
 # Supabase CLI local state
 supabase/.temp/

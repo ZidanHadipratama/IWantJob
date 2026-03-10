@@ -66,6 +66,8 @@ export interface FillFormSessionState {
   fields: object[]
   answers: object[]
   fieldCount: number
+  frameId?: number | null
+  includedFlaggedFieldIds?: string[]
   inFlightRequest?: InFlightRequest | null
 }
 
@@ -74,6 +76,7 @@ export interface StorageSchema {
   db_config: DBConfig
   backend_url: string
   user_id: string
+  persona_text: string
   base_resume_text: string
   base_resume_json: object | null
   debug_log: string[]
@@ -154,6 +157,8 @@ export function normalizeFillFormSession(raw: unknown): FillFormSessionState | n
     fields,
     answers,
     fieldCount,
+    frameId: typeof session.frameId === "number" ? session.frameId : null,
+    includedFlaggedFieldIds: asStringArray(session.includedFlaggedFieldIds),
     inFlightRequest: asInFlightRequest(session.inFlightRequest)
   }
 }

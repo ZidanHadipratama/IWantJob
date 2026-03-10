@@ -28,6 +28,77 @@ interface AnswerCard {
 }
 
 type Phase = "idle" | "extracted" | "answered"
+type GenerationMode = "single" | "batch"
+const MAX_AI_FIELDS_PER_BATCH = 12
+const MAX_SINGLE_PASS_FIELD_PAYLOAD = 4500
+const MAX_BATCH_FIELD_PAYLOAD = 2800
+const MAX_SOFT_FLAGGED_OVERRIDES = 2
+
+function isSoftOverrideField(field: FormField): boolean {
+  return field.ai_skip_kind === "oversized-options"
+}
+
+function getEffectiveAiSkipReason(field: FormField, includedFlaggedFieldIds: string[]): string | null {
+  if (!field.ai_skip_reason) return null
+  if (isSoftOverrideField(field) && includedFlaggedFieldIds.includes(field.field_id)) {
+    return null
+  }
+  return field.ai_skip_reason
+}
+
+function estimateFieldPayloadLength(field: FormField): number {
+  const optionsText = (field.options || [])
+    .map((option) => `${option.label || ""} ${option.value || ""}`)
+    .join(" ")
+
+  return (
+    field.label.length +
+    (field.placeholder?.length || 0) +
+    optionsText.length +
+    80
+  )
+}
+
+function estimateFieldSetPayloadLength(fields: FormField[]): number {
+  return fields.reduce((total, field) => total + estimateFieldPayloadLength(field), 0)
+}
+
+function buildFieldBatches(fields: FormField[], maxFields: number, maxPayload: number): FormField[][] {
+  const batches: FormField[][] = []
+  let current: FormField[] = []
+  let currentPayload = 0
+
+  for (const field of fields) {
+    const nextPayload = estimateFieldPayloadLength(field)
+    const shouldStartNewBatch =
+      current.length > 0 &&
+      (current.length >= maxFields || currentPayload + nextPayload > maxPayload)
+
+    if (shouldStartNewBatch) {
+      batches.push(current)
+      current = []
+      currentPayload = 0
+    }
+
+    current.push(field)
+    currentPayload += nextPayload
+  }
+
+  if (current.length > 0) {
+    batches.push(current)
+  }
+
+  return batches
+}
+
+function sortAnswersByFieldOrder(sourceFields: FormField[], cards: AnswerCard[]): AnswerCard[] {
+  const fieldOrder = new Map(sourceFields.map((field, index) => [field.field_id, index]))
+  return [...cards].sort((left, right) => {
+    const leftIndex = fieldOrder.get(left.field_id) ?? Number.MAX_SAFE_INTEGER
+    const rightIndex = fieldOrder.get(right.field_id) ?? Number.MAX_SAFE_INTEGER
+    return leftIndex - rightIndex
+  })
+}
 
 function buildPdfFilename(context: ActiveJobContext | null): string {
   const segments = [context?.company || "company", context?.job_title || "resume"]
@@ -84,18 +155,23 @@ export default function FillForm() {
   const [phase, setPhase] = useState<Phase>("idle")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [personaText, setPersonaText] = useState("")
   const [fields, setFields] = useState<FormField[]>([])
   const [answers, setAnswers] = useState<AnswerCard[]>([])
   const [autofillResults, setAutofillResults] = useState<AutofillResultItem[]>([])
   const [autofillLoading, setAutofillLoading] = useState(false)
   const [fieldCount, setFieldCount] = useState(0)
+  const [frameId, setFrameId] = useState<number | null>(null)
   const [activeJobContext, setActiveJobContext] = useState<ActiveJobContext | null>(null)
   const [savingDraft, setSavingDraft] = useState(false)
   const [saveTone, setSaveTone] = useState<"neutral" | "success" | "error">("neutral")
   const [saveMessage, setSaveMessage] = useState("")
+  const [includedFlaggedFieldIds, setIncludedFlaggedFieldIds] = useState<string[]>([])
 
   const applyFillFormSession = useCallback((session: ReturnType<typeof normalizeFillFormSession>) => {
     if (!session) {
+      setFrameId(null)
+      setIncludedFlaggedFieldIds([])
       setLoading(false)
       return
     }
@@ -104,6 +180,8 @@ export default function FillForm() {
     setFields(session.fields as FormField[])
     setAnswers((session.answers as AnswerCard[]).map((answer) => ({ ...answer, copied: false })))
     setFieldCount(session.fieldCount)
+    setFrameId(session.frameId ?? null)
+    setIncludedFlaggedFieldIds(session.includedFlaggedFieldIds || [])
     setLoading(session.inFlightRequest?.kind === "generate_answers")
   }, [])
 
@@ -118,10 +196,12 @@ export default function FillForm() {
     debug("FillForm", "Component mounted")
     Promise.all([
       getStorage("fillform_session"),
-      getStorage("active_job_context")
-    ]).then(([sessionRaw, contextRaw]) => {
+      getStorage("active_job_context"),
+      getStorage("persona_text")
+    ]).then(([sessionRaw, contextRaw, personaRaw]) => {
       const session = normalizeFillFormSession(sessionRaw)
       const context = normalizeActiveJobContext(contextRaw)
+      setPersonaText(typeof personaRaw === "string" ? personaRaw.trim() : "")
       if (context) setActiveJobContext(context)
 
       if (session && session.phase !== "idle") {
@@ -137,13 +217,21 @@ export default function FillForm() {
     nextFields: FormField[],
     nextAnswers: AnswerCard[],
     nextFieldCount: number,
+    nextFrameId: number | null = frameId,
+    nextIncludedFlaggedFieldIds: string[] = includedFlaggedFieldIds,
     inFlightRequest: InFlightRequest | null = null
   ) => {
+    const normalizedIncludedFlaggedFieldIds = nextIncludedFlaggedFieldIds.filter((fieldId) =>
+      nextFields.some((field) => field.field_id === fieldId && isSoftOverrideField(field))
+    )
+
     await setStorage("fillform_session", {
       phase: nextPhase,
       fields: nextFields,
       answers: nextAnswers.map(({ copied, ...answer }) => answer),
       fieldCount: nextFieldCount,
+      frameId: nextFrameId,
+      includedFlaggedFieldIds: normalizedIncludedFlaggedFieldIds,
       inFlightRequest
     })
 
@@ -160,7 +248,7 @@ export default function FillForm() {
         field_type
       }))
     })
-  }, [])
+  }, [frameId, includedFlaggedFieldIds])
 
   useEffect(() => {
     let mounted = true
@@ -176,6 +264,9 @@ export default function FillForm() {
       if (areaName !== "local") return
       if (changes.active_job_context) {
         setActiveJobContext(normalizeActiveJobContext(changes.active_job_context.newValue))
+      }
+      if (changes.persona_text) {
+        setPersonaText(typeof changes.persona_text.newValue === "string" ? changes.persona_text.newValue.trim() : "")
       }
       if (changes.fillform_session) {
         const nextSession = normalizeFillFormSession(changes.fillform_session.newValue)
@@ -206,7 +297,7 @@ export default function FillForm() {
         return
       }
       if (result.fields.length === 0) {
-        setError("No form fields found on this page. Make sure you're on an application form page.")
+        setError("No form fields found on this page or in accessible embedded frames. Make sure you're on an application form page.")
         return
       }
       debug("FillForm", `Found ${result.fields.length} fields:`, result.fields.map(f => f.label))
@@ -216,9 +307,11 @@ export default function FillForm() {
       }
       setFields(result.fields)
       setFieldCount(result.fields.length)
+      setFrameId(typeof result.frame_id === "number" ? result.frame_id : null)
+      setIncludedFlaggedFieldIds([])
       setAutofillResults([])
       setPhase("extracted")
-      await syncDraftState("extracted", result.fields, [], result.fields.length)
+      await syncDraftState("extracted", result.fields, [], result.fields.length, result.frame_id ?? null, [])
     } catch (err) {
       debugError("FillForm", "EXTRACT_FORM failed:", err)
       setError(err instanceof Error ? err.message : "Could not connect to the page. Try refreshing the page.")
@@ -227,7 +320,7 @@ export default function FillForm() {
     }
   }
 
-  async function handleFillForm() {
+  async function handleFillForm(mode: GenerationMode = "single") {
     const requestId = crypto.randomUUID()
     setLoading(true)
     setError("")
@@ -235,6 +328,7 @@ export default function FillForm() {
     try {
       if (!isUnlocked) {
         setError("Tailor a resume first in the Resume tab to unlock Fill Form for this job.")
+        shouldClearLoading = true
         return
       }
 
@@ -242,33 +336,74 @@ export default function FillForm() {
         getStorage("base_resume_json"),
         getStorage("active_job_context")
       ])
+      const personaTextRaw = await getStorage("persona_text")
+      const personaText = typeof personaTextRaw === "string" ? personaTextRaw.trim() : ""
       const resumeJson = activeJobContext?.tailored_resume_json || baseResumeJson
       if (!resumeJson) {
         setError("No resume found. Go to Settings and add your base resume first.")
+        shouldClearLoading = true
         return
       }
 
       const client = await createApiClient()
-      const aiEligibleFields = fields.filter((field) => field.type !== "file")
-      await syncDraftState("extracted", fields, answers, fieldCount, {
+      const aiEligibleFields = fields.filter(
+        (field) => !getEffectiveAiSkipReason(field, includedFlaggedFieldIds)
+      )
+      if (aiEligibleFields.length === 0) {
+        setError("This form has no AI-answerable fields after the current guardrails. Complete the skipped fields manually.")
+        shouldClearLoading = true
+        return
+      }
+
+      const needsBatchGeneration =
+        aiEligibleFields.length > MAX_AI_FIELDS_PER_BATCH ||
+        estimateFieldSetPayloadLength(aiEligibleFields) > MAX_SINGLE_PASS_FIELD_PAYLOAD
+
+      if (needsBatchGeneration && mode === "single") {
+        setError("This form is too large for one AI pass. Review the skipped fields below or use Generate in Batches.")
+        shouldClearLoading = true
+        return
+      }
+
+      await syncDraftState("extracted", fields, answers, fieldCount, frameId, includedFlaggedFieldIds, {
         id: requestId,
         kind: "generate_answers"
       })
-      debug("FillForm", "Calling fill-form with", aiEligibleFields.length, "AI-answerable fields")
-      const result = await client.fillForm({
-        form_fields: aiEligibleFields,
-        resume_json: resumeJson,
-        job_description: activeJobContext?.job_description || undefined,
-      })
-      debug("FillForm", "fill-form response:", result)
+      const batches =
+        mode === "batch"
+          ? buildFieldBatches(aiEligibleFields, MAX_AI_FIELDS_PER_BATCH, MAX_BATCH_FIELD_PAYLOAD)
+          : [aiEligibleFields]
 
-      const cards = result.answers.map((a: any) => ({
-        field_id: a.field_id || "",
-        label: a.label || "",
-        answer: a.answer || "",
-        field_type: a.field_type || "text",
-        copied: false,
-      }))
+      debug("FillForm", "Calling fill-form with", aiEligibleFields.length, "AI-answerable fields in", batches.length, "batch(es)")
+
+      const collectedAnswers: AnswerCard[] = []
+      for (const batch of batches) {
+        const latestSessionBeforeBatch = normalizeFillFormSession(await getStorage("fillform_session"))
+        if (latestSessionBeforeBatch?.inFlightRequest?.id !== requestId) {
+          debug("FillForm", "Aborting batch generation due to stale request", requestId)
+          return
+        }
+
+        const result = await client.fillForm({
+          form_fields: batch,
+          resume_json: resumeJson,
+          persona_text: personaText || undefined,
+          job_description: activeJobContext?.job_description || undefined,
+        })
+        debug("FillForm", "fill-form response:", result)
+
+        collectedAnswers.push(
+          ...result.answers.map((a: any) => ({
+            field_id: a.field_id || "",
+            label: a.label || "",
+            answer: a.answer || "",
+            field_type: a.field_type || "text",
+            copied: false,
+          }))
+        )
+      }
+
+      const cards = sortAnswersByFieldOrder(fields, collectedAnswers)
       const latestSession = normalizeFillFormSession(await getStorage("fillform_session"))
       if (latestSession?.inFlightRequest?.id !== requestId) {
         debug("FillForm", "Ignoring stale fill-form response for request", requestId)
@@ -277,13 +412,13 @@ export default function FillForm() {
       setAnswers(cards)
       setAutofillResults([])
       setPhase("answered")
-      await syncDraftState("answered", fields, cards, fieldCount, null)
+      await syncDraftState("answered", fields, cards, fieldCount, frameId, includedFlaggedFieldIds, null)
       shouldClearLoading = true
     } catch (err) {
       debugError("FillForm", "fill-form failed:", err)
       const latestSession = normalizeFillFormSession(await getStorage("fillform_session"))
       if (latestSession?.inFlightRequest?.id === requestId) {
-        await syncDraftState("extracted", fields, answers, fieldCount, null)
+        await syncDraftState("extracted", fields, answers, fieldCount, frameId, includedFlaggedFieldIds, null)
         shouldClearLoading = true
       }
       setError(err instanceof Error ? err.message : "Failed to generate answers")
@@ -318,7 +453,27 @@ export default function FillForm() {
     )
     setAnswers(nextAnswers)
     setAutofillResults([])
-    syncDraftState("answered", fields, nextAnswers, fieldCount)
+    syncDraftState("answered", fields, nextAnswers, fieldCount, frameId, includedFlaggedFieldIds)
+  }
+
+  function handleToggleFlaggedField(fieldId: string) {
+    setIncludedFlaggedFieldIds((current) => {
+      if (current.includes(fieldId)) {
+        const next = current.filter((id) => id !== fieldId)
+        syncDraftState(phase, fields, answers, fieldCount, frameId, next)
+        return next
+      }
+
+      if (current.length >= MAX_SOFT_FLAGGED_OVERRIDES) {
+        setError(`You can include up to ${MAX_SOFT_FLAGGED_OVERRIDES} flagged fields in AI generation.`)
+        return current
+      }
+
+      setError("")
+      const next = [...current, fieldId]
+      syncDraftState(phase, fields, answers, fieldCount, frameId, next)
+      return next
+    })
   }
 
   async function handleSaveDraft() {
@@ -429,6 +584,8 @@ export default function FillForm() {
           field_type
         })),
         resume_file: resumeFilePayload
+      }, {
+        frameId
       })
 
       if (!result.success) {
@@ -462,6 +619,8 @@ export default function FillForm() {
     setAnswers([])
     setAutofillResults([])
     setFieldCount(0)
+    setFrameId(null)
+    setIncludedFlaggedFieldIds([])
     setError("")
     setSaveTone("neutral")
     setSaveMessage("")
@@ -480,9 +639,30 @@ export default function FillForm() {
   const recoveredWithoutResumeContext =
     phase !== "idle" &&
     (!activeJobContext?.job_description || (phase === "answered" && activeJobContext?.phase !== "tailored"))
+  const hasPersona = Boolean(personaText)
   const hasSavedJobWithLocalDraft = activeJobContext?.persistence_state === "draft" && Boolean(activeJobContext?.job_id)
+  const aiEligibleFields = fields.filter(
+    (field) => !getEffectiveAiSkipReason(field, includedFlaggedFieldIds)
+  )
+  const softOverrideFields = fields
+    .map((field) => ({
+      ...field,
+      effective_skip_reason: getEffectiveAiSkipReason(field, includedFlaggedFieldIds),
+      is_included: includedFlaggedFieldIds.includes(field.field_id)
+    }))
+    .filter((field) => field.ai_skip_reason && isSoftOverrideField(field))
+  const skippedFields = fields
+    .map((field) => ({
+      ...field,
+      effective_skip_reason: getEffectiveAiSkipReason(field, includedFlaggedFieldIds)
+    }))
+    .filter((field) => field.effective_skip_reason)
   const fileFieldCount = fields.filter((field) => field.type === "file").length
-  const answerableFieldCount = fields.filter((field) => field.type !== "file").length
+  const selectedSoftOverrideCount = softOverrideFields.filter((field) => field.is_included).length
+  const answerableFieldCount = aiEligibleFields.length
+  const needsBatchGeneration =
+    aiEligibleFields.length > MAX_AI_FIELDS_PER_BATCH ||
+    estimateFieldSetPayloadLength(aiEligibleFields) > MAX_SINGLE_PASS_FIELD_PAYLOAD
   const autofillSummary = getAutofillSummary(autofillResults)
 
   return (
@@ -497,6 +677,19 @@ export default function FillForm() {
       {recoveredWithoutResumeContext && (
         <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           The recovered form draft is missing a complete Resume context. You can still copy your local answers, but re-open the Resume tab and tailor again before saving.
+        </div>
+      )}
+
+      {isUnlocked && (
+        <div
+          className={`rounded-lg border px-3 py-2 text-xs ${
+            hasPersona
+              ? "border-violet-100 bg-violet-50 text-violet-800"
+              : "border-slate-200 bg-slate-50 text-slate-700"
+          }`}>
+          {hasPersona
+            ? "Persona context is active. Generate Answers will use your saved persona together with the tailored resume and job description."
+            : "No persona added. Generate Answers will use your tailored resume and job description only. Persona is optional in Settings."}
         </div>
       )}
 
@@ -559,24 +752,103 @@ export default function FillForm() {
             </div>
           )}
 
+          {softOverrideFields.length > 0 && (
+            <div className="space-y-2 rounded-lg border border-sky-100 bg-sky-50 px-3 py-3 text-xs text-sky-800">
+              <p className="font-medium">
+                Flagged AI overrides: {selectedSoftOverrideCount} of {MAX_SOFT_FLAGGED_OVERRIDES} selected
+              </p>
+              <p>
+                You can include a small number of oversized choice fields in AI generation if they matter, but this may require batching and use more tokens.
+              </p>
+              <div className="space-y-1.5">
+                {softOverrideFields.map((field) => {
+                  const disableInclude =
+                    !field.is_included && selectedSoftOverrideCount >= MAX_SOFT_FLAGGED_OVERRIDES
+
+                  return (
+                    <div key={`${field.field_id}-${field.label}`} className="rounded-md border border-sky-200/70 bg-white/80 px-2 py-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <span className="block font-medium text-text-secondary">{field.label}</span>
+                          <p className="text-[11px] text-sky-700">{field.ai_skip_reason}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleFlaggedField(field.field_id)}
+                          disabled={disableInclude}
+                          className={`rounded-md px-2 py-1 text-[11px] font-medium ${
+                            field.is_included
+                              ? "bg-primary text-white"
+                              : disableInclude
+                                ? "cursor-not-allowed bg-slate-100 text-slate-400"
+                                : "bg-white text-sky-800 ring-1 ring-sky-200"
+                          }`}>
+                          {field.is_included ? "Included" : "Include in AI"}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {skippedFields.length > 0 && (
+            <div className="space-y-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-3 text-xs text-amber-800">
+              <p className="font-medium">
+                {skippedFields.length} field{skippedFields.length === 1 ? "" : "s"} will need manual review before submission.
+              </p>
+              <div className="space-y-1.5">
+                {skippedFields.map((field) => (
+                  <div key={`${field.field_id}-${field.label}`} className="rounded-md border border-amber-200/70 bg-white/70 px-2 py-1.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="font-medium text-text-secondary">{field.label}</span>
+                      <span className="font-mono text-[10px] uppercase tracking-wide text-amber-700">{field.type}</span>
+                    </div>
+                    <p className="mt-1 text-[11px]">{field.effective_skip_reason}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <button
-            onClick={handleFillForm}
-            disabled={loading || !isUnlocked}
+            onClick={() => handleFillForm("single")}
+            disabled={loading || !isUnlocked || needsBatchGeneration || answerableFieldCount === 0}
             className="btn-accent w-full flex items-center justify-center gap-2">
             {loading ? <Loader className="w-4 h-4 animate-spin" /> : <ClipboardList className="w-4 h-4" />}
             {!isUnlocked
               ? "Tailor Resume First"
+              : answerableFieldCount === 0
+                ? "Manual Fields Only"
+                : needsBatchGeneration
+                  ? "Single Pass Too Large"
               : loading
                 ? "Generating Answers..."
                 : "Generate Answers"}
           </button>
+
+          {needsBatchGeneration && answerableFieldCount > 0 && (
+            <button
+              onClick={() => handleFillForm("batch")}
+              disabled={loading || !isUnlocked}
+              className="btn-secondary w-full flex items-center justify-center gap-2">
+              {loading ? <Loader className="w-4 h-4 animate-spin" /> : <ClipboardList className="w-4 h-4" />}
+              {loading ? "Generating..." : "Generate in Batches"}
+            </button>
+          )}
 
           {loading && (
             <p className="text-xs text-text-muted text-center">This may take a minute depending on your AI model...</p>
           )}
           {isUnlocked && (
             <p className="text-xs text-sky-700 text-center">
-              Generated answers stay local here. {answerableFieldCount} field{answerableFieldCount === 1 ? "" : "s"} will be answered by AI, and any file upload fields are handled separately during autofill. Save to the tracker from this tab when your review is done.
+              Generated answers stay local here. {answerableFieldCount} field{answerableFieldCount === 1 ? "" : "s"} will be sent to AI, {skippedFields.length} field{skippedFields.length === 1 ? "" : "s"} require manual review, and any file upload fields are handled separately during autofill. {hasPersona ? "Your saved persona will also shape answer framing." : "Without persona, answers rely on resume + JD only."} Save to the tracker from this tab when your review is done.
+            </p>
+          )}
+          {needsBatchGeneration && (
+            <p className="text-xs text-amber-700 text-center">
+              This form is still too large for one AI pass after the guardrails. `Generate in Batches` makes multiple requests and may use more tokens.
             </p>
           )}
           {!isUnlocked && (
@@ -613,8 +885,19 @@ export default function FillForm() {
             {hasSavedJobWithLocalDraft
               ? "You are editing answers for an existing saved job. These local changes are not in Supabase yet; save again from this tab when ready."
               : activeJobContext?.persistence_state === "saved"
-              ? "Saved to tracker. Any edits you make here will turn this back into an unsaved draft until you save again from the Resume tab."
+              ? "Saved to tracker. Any edits you make here will turn this back into an unsaved draft until you save again from this tab."
               : "Local draft only. Edit these answers freely, autofill if needed, then save to the tracker from this tab."}
+          </div>
+
+          <div
+            className={`rounded-lg border px-3 py-2 text-xs ${
+              hasPersona
+                ? "border-violet-100 bg-violet-50 text-violet-800"
+                : "border-slate-200 bg-slate-50 text-slate-700"
+            }`}>
+            {hasPersona
+              ? "These answers were generated with persona context in addition to your tailored resume and the job description."
+              : "These answers were generated without persona context. You can add one later in Settings if you want more personal framing."}
           </div>
 
           <button
@@ -733,7 +1016,7 @@ function FillFormContextHint({ context }: { context: ActiveJobContext | null }) 
 
   if (context?.phase === "tailored" && context?.tailored_resume_json && context?.job_description?.trim()) {
     if (context.persistence_state === "saved") {
-      message = `Unlocked. This application is already saved for ${role}${company}. New edits here stay local until you save again from the Resume tab.`
+      message = `Unlocked. This application is already saved for ${role}${company}. New edits here stay local until you save again from this tab.`
       toneClass = "border-emerald-100 bg-emerald-50 text-emerald-800"
     } else {
       message = `Unlocked. Using the unsaved tailored resume + job description from ${role}${company}. Nothing has been saved to the tracker yet.`
