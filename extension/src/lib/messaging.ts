@@ -4,7 +4,10 @@ import { debug, debugError } from "./debug"
  * Send a message to the content script on the active tab.
  * If the content script isn't loaded yet, inject it first and retry.
  */
-export async function sendToContentScript(type: string): Promise<any> {
+export async function sendToContentScript(
+  type: string,
+  payload?: Record<string, unknown>
+): Promise<any> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   debug("messaging", "Active tab:", tab?.id, tab?.url)
 
@@ -17,9 +20,11 @@ export async function sendToContentScript(type: string): Promise<any> {
     throw new Error("Cannot run on browser internal pages. Navigate to a website first.")
   }
 
+  const message = payload ? { type, ...payload } : { type }
+
   // Try sending the message directly (content script may already be loaded)
   try {
-    const response = await chrome.tabs.sendMessage(tabId, { type })
+    const response = await chrome.tabs.sendMessage(tabId, message)
     debug("messaging", "Direct response:", response)
     if (response && typeof response === "object" && response.success !== undefined) {
       return response
@@ -55,7 +60,7 @@ export async function sendToContentScript(type: string): Promise<any> {
 
   // Retry the message
   try {
-    const response = await chrome.tabs.sendMessage(tabId, { type })
+    const response = await chrome.tabs.sendMessage(tabId, message)
     debug("messaging", "Response after injection:", response)
     if (response && typeof response === "object") {
       return response

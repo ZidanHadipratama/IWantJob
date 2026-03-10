@@ -1,5 +1,5 @@
-"""Integration tests for POST /log-job, GET /job/:id, and POST /save-qa endpoints."""
-from unittest.mock import MagicMock, patch
+"""Integration tests for key backend endpoints."""
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
@@ -62,6 +62,52 @@ def make_mock_db():
         "is_base": False,
     }
     return db
+
+
+@pytest.mark.asyncio
+async def test_test_ai_returns_connected_true_for_ok_probe():
+    transport = ASGITransport(app=app)
+    mock_ai = MagicMock()
+    mock_ai.completion = AsyncMock(return_value="OK")
+
+    with patch("app.routers.connection.AIService", return_value=mock_ai):
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get(
+                "/test-ai",
+                headers={
+                    "X-AI-Provider": "openai",
+                    "X-AI-Key": "sk-test",
+                    "X-AI-Model": "gpt-4o-mini",
+                },
+            )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["connected"] is True
+    assert "responded correctly" in body["message"]
+
+
+@pytest.mark.asyncio
+async def test_test_ai_returns_connected_false_for_bad_probe():
+    transport = ASGITransport(app=app)
+    mock_ai = MagicMock()
+    mock_ai.completion = AsyncMock(return_value="hello")
+
+    with patch("app.routers.connection.AIService", return_value=mock_ai):
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get(
+                "/test-ai",
+                headers={
+                    "X-AI-Provider": "openai",
+                    "X-AI-Key": "sk-test",
+                    "X-AI-Model": "gpt-4o-mini",
+                },
+            )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["connected"] is False
+    assert "Unexpected AI response" in body["message"]
 
 
 # ── Test 1: POST /log-job creates job with 201 ─────────────────────────────

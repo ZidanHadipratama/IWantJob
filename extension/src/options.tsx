@@ -10,24 +10,25 @@ import { ResumeUploadCard } from "~components/options/ResumeUploadCard"
 import JobTracker from "~components/options/JobTracker"
 import JobDetail from "~components/options/JobDetail"
 import { getOrCreateUserId } from "~lib/storage"
+import type { SetupStatus } from "~components/options/SetupProgress"
 
 type OptionsTab = "tracker" | "settings"
 
 interface SectionState {
-  backend: boolean
-  database: boolean
-  ai: boolean
-  resume: boolean
+  backend: SetupStatus
+  database: SetupStatus
+  ai: SetupStatus
+  resume: SetupStatus
 }
 
 function Options() {
   const [activeTab, setActiveTab] = useState<OptionsTab>("tracker")
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [sections, setSections] = useState<SectionState>({
-    backend: false,
-    database: false,
-    ai: false,
-    resume: false
+    backend: "configured",
+    database: "missing",
+    ai: "missing",
+    resume: "missing"
   })
 
   useEffect(() => {
@@ -35,16 +36,16 @@ function Options() {
   }, [])
 
   function updateSection(key: keyof SectionState) {
-    return (configured: boolean) => {
-      setSections((prev) => ({ ...prev, [key]: configured }))
+    return (status: SetupStatus) => {
+      setSections((prev) => ({ ...prev, [key]: status }))
     }
   }
 
   const setupSections = [
-    { name: "Backend", configured: sections.backend },
-    { name: "Database", configured: sections.database },
-    { name: "AI Provider", configured: sections.ai },
-    { name: "Resume", configured: sections.resume }
+    { name: "Backend", status: sections.backend },
+    { name: "Database", status: sections.database },
+    { name: "AI Provider", status: sections.ai },
+    { name: "Resume", status: sections.resume }
   ]
 
   const tabs = [
@@ -122,10 +123,10 @@ function Options() {
             <SetupProgress sections={setupSections} />
 
             <div className="space-y-4">
-              <BackendConfigCard onConfigChange={updateSection("backend")} />
-              <SupabaseConfigCard onConfigChange={updateSection("database")} />
-              <AIConfigCard onConfigChange={updateSection("ai")} />
-              <ResumeUploadCard onConfigChange={updateSection("resume")} />
+              <BackendConfigCard onStatusChange={updateSection("backend")} />
+              <SupabaseConfigCard onStatusChange={updateSection("database")} />
+              <AIConfigCard onStatusChange={updateSection("ai")} />
+              <ResumeUploadCard onConfigChange={(configured) => updateSection("resume")(configured ? "healthy" : "missing")} />
             </div>
 
             <p className="text-center text-xs text-text-muted mt-8">

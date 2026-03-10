@@ -26,6 +26,11 @@ export interface DraftQAPair {
   field_type: string
 }
 
+export interface InFlightRequest {
+  id: string
+  kind: "tailor_resume" | "generate_answers"
+}
+
 export interface ActiveJobContext {
   phase: "extracted" | "tailored"
   persistence_state: "draft" | "saved"
@@ -53,6 +58,7 @@ export interface ResumeSessionState {
   metadataLines: string[]
   tailoredJson: object | null
   matchScore: number
+  inFlightRequest?: InFlightRequest | null
 }
 
 export interface FillFormSessionState {
@@ -60,6 +66,7 @@ export interface FillFormSessionState {
   fields: object[]
   answers: object[]
   fieldCount: number
+  inFlightRequest?: InFlightRequest | null
 }
 
 export interface StorageSchema {
@@ -74,6 +81,7 @@ export interface StorageSchema {
   resume_session: ResumeSessionState | null
   active_job_context: ActiveJobContext | null
   fillform_session: FillFormSessionState | null
+  sidepanel_active_tab: "resume" | "fill-form" | "tracker"
 }
 
 function asString(value: unknown): string {
@@ -86,6 +94,20 @@ function asStringArray(value: unknown): string[] {
 
 function asObjectArray(value: unknown): object[] {
   return Array.isArray(value) ? value.filter((item): item is object => Boolean(item) && typeof item === "object") : []
+}
+
+function asInFlightRequest(value: unknown): InFlightRequest | null {
+  if (!value || typeof value !== "object") return null
+
+  const request = value as Partial<InFlightRequest>
+  const id = asString(request.id)
+  const kind = request.kind === "tailor_resume" || request.kind === "generate_answers"
+    ? request.kind
+    : null
+
+  if (!id || !kind) return null
+
+  return { id, kind }
 }
 
 export function normalizeResumeSession(raw: unknown): ResumeSessionState | null {
@@ -108,7 +130,8 @@ export function normalizeResumeSession(raw: unknown): ResumeSessionState | null 
     pageExcerpt: asString(session.pageExcerpt),
     metadataLines: asStringArray(session.metadataLines),
     tailoredJson: session.tailoredJson && typeof session.tailoredJson === "object" ? session.tailoredJson : null,
-    matchScore: typeof session.matchScore === "number" ? session.matchScore : 0
+    matchScore: typeof session.matchScore === "number" ? session.matchScore : 0,
+    inFlightRequest: asInFlightRequest(session.inFlightRequest)
   }
 }
 
@@ -130,7 +153,8 @@ export function normalizeFillFormSession(raw: unknown): FillFormSessionState | n
     phase,
     fields,
     answers,
-    fieldCount
+    fieldCount,
+    inFlightRequest: asInFlightRequest(session.inFlightRequest)
   }
 }
 

@@ -1,5 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react"
+import {
+  CheckCircle,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  Loader,
+  XCircle
+} from "lucide-react"
+
+import { createApiClient, type ServiceCheckResult } from "~lib/api"
 import {
   getStorage,
   setStorage,
@@ -7,6 +17,8 @@ import {
   type AIConfig,
   type AIModelConfig
 } from "~lib/storage"
+
+import type { SetupStatus } from "./SetupProgress"
 
 const PROVIDER_DEFAULTS: Record<string, string> = {
   openai: "gpt-4o",
@@ -25,7 +37,45 @@ const PROVIDER_OPTIONS = [
 ]
 
 interface AIConfigCardProps {
-  onConfigChange?: (configured: boolean) => void
+  onStatusChange?: (status: SetupStatus) => void
+}
+
+interface ModelTestStatus {
+  status: "idle" | "loading" | "success" | "error"
+  message: string
+}
+
+function isModelConfigured(config: AIModelConfig | undefined): config is AIModelConfig {
+  if (!config) return false
+  return !!(config.provider && config.model && (config.api_key || config.provider === "ollama"))
+}
+
+function deriveSetupStatus(
+  config: AIConfig,
+  tailorOverride: boolean,
+  fillOverride: boolean,
+  tests?: Record<string, ModelTestStatus>
+): SetupStatus {
+  const activeConfigs = [config.default]
+  if (tailorOverride) activeConfigs.push(config.overrides?.tailor as AIModelConfig)
+  if (fillOverride) activeConfigs.push(config.overrides?.fill as AIModelConfig)
+
+  if (activeConfigs.some((entry) => !isModelConfigured(entry))) {
+    return "missing"
+  }
+
+  const testStatuses = Object.values(tests || {})
+  if (testStatuses.some((entry) => entry.status === "error")) {
+    return "error"
+  }
+  if (
+    testStatuses.length > 0 &&
+    testStatuses.every((entry) => entry.status === "success") &&
+    testStatuses.length >= activeConfigs.length
+  ) {
+    return "healthy"
+  }
+  return "configured"
 }
 
 function ModelConfigFields({
@@ -106,14 +156,51 @@ function ModelConfigFields({
           className="input-field"
         />
         <p className="text-xs text-text-muted mt-1">
-          Suggestion: {PROVIDER_DEFAULTS[config.provider] || "\u2014"}
+          Suggestion: {PROVIDER_DEFAULTS[config.provider] || "-"}
         </p>
       </div>
     </div>
   )
 }
 
-export function AIConfigCard({ onConfigChange }: AIConfigCardProps) {
+function StatusLine({
+  label,
+  result
+}: {
+  label: string
+  result: ModelTestStatus | undefined
+}) {
+  if (!result || result.status === "idle") {
+    return null
+  }
+
+  if (result.status === "loading") {
+    return (
+      <div className="flex items-center gap-2 text-sm text-text-muted">
+        <Loader className="w-4 h-4 animate-spin" />
+        <span>{label}: testing…</span>
+      </div>
+    )
+  }
+
+  if (result.status === "success") {
+    return (
+      <div className="flex items-center gap-2 text-sm text-primary">
+        <CheckCircle className="w-4 h-4" />
+        <span>{label}: {result.message}</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2 text-sm text-red-600">
+      <XCircle className="w-4 h-4" />
+      <span>{label}: {result.message}</span>
+    </div>
+  )
+}
+
+export function AIConfigCard({ onStatusChange }: AIConfigCardProps) {
   const [config, setConfig] = useState<AIConfig>({
     default: { provider: "openai", api_key: "", model: "gpt-4o" }
   })
@@ -124,49 +211,62 @@ export function AIConfigCard({ onConfigChange }: AIConfigCardProps) {
   const [tailorOverride, setTailorOverride] = useState(false)
   const [fillOverride, setFillOverride] = useState(false)
   const [savedIndicator, setSavedIndicator] = useState(false)
+  const [testingActiveModels, setTestingActiveModels] = useState(false)
+  const [testResults, setTestResults] = useState<Record<string, ModelTestStatus>>({})
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onStatusChangeRef = useRef(onStatusChange)
+
+  onStatusChangeRef.current = onStatusChange
 
   useEffect(() => {
     getStorage("ai_config").then((raw) => {
       const migrated = migrateAIConfig(raw)
+      const hasTailorOverride = !!migrated.overrides?.tailor
+      const hasFillOverride = !!migrated.overrides?.fill
+
       setConfig(migrated)
-      setTailorOverride(!!migrated.overrides?.tailor)
-      setFillOverride(!!migrated.overrides?.fill)
-      if (migrated.overrides?.tailor || migrated.overrides?.fill) {
+      setTailorOverride(hasTailorOverride)
+      setFillOverride(hasFillOverride)
+      if (hasTailorOverride || hasFillOverride) {
         setOverridesOpen(true)
       }
-      // Save migrated config back if it was in old format
       if (raw && !(raw as any).default && (raw as any).provider) {
         setStorage("ai_config", migrated)
       }
+
+      onStatusChangeRef.current?.(
+        deriveSetupStatus(migrated, hasTailorOverride, hasFillOverride)
+      )
     })
   }, [])
 
   const save = useCallback(
-    (newConfig: AIConfig) => {
+    (newConfig: AIConfig, nextTailorOverride = tailorOverride, nextFillOverride = fillOverride) => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(async () => {
         await setStorage("ai_config", newConfig)
         setSavedIndicator(true)
         setTimeout(() => setSavedIndicator(false), 1500)
-        const d = newConfig.default
-        onConfigChange?.(
-          !!(d.provider && (d.api_key || d.provider === "ollama") && d.model)
-        )
+        setTestResults({})
+        onStatusChange?.(deriveSetupStatus(newConfig, nextTailorOverride, nextFillOverride))
       }, 500)
     },
-    [onConfigChange]
+    [fillOverride, onStatusChange, tailorOverride]
   )
 
   function updateDefault(defaultConfig: AIModelConfig) {
     const newConfig = { ...config, default: defaultConfig }
     setConfig(newConfig)
+    setTestResults({})
+    onStatusChange?.(deriveSetupStatus(newConfig, tailorOverride, fillOverride))
     save(newConfig)
   }
 
   function updateOverride(
     feature: "tailor" | "fill",
-    override: AIModelConfig | undefined
+    override: AIModelConfig | undefined,
+    nextTailorOverride = tailorOverride,
+    nextFillOverride = fillOverride
   ) {
     const newConfig = {
       ...config,
@@ -175,37 +275,120 @@ export function AIConfigCard({ onConfigChange }: AIConfigCardProps) {
         [feature]: override
       }
     }
-    // Clean up empty overrides
     if (!newConfig.overrides?.tailor && !newConfig.overrides?.fill) {
       delete newConfig.overrides
     }
     setConfig(newConfig)
-    save(newConfig)
+    setTestResults({})
+    onStatusChange?.(deriveSetupStatus(newConfig, nextTailorOverride, nextFillOverride))
+    save(newConfig, nextTailorOverride, nextFillOverride)
   }
 
   function handleTailorToggle(enabled: boolean) {
     setTailorOverride(enabled)
     if (enabled) {
-      updateOverride("tailor", {
-        provider: config.default.provider,
-        api_key: config.default.api_key,
-        model: config.default.model
-      })
+      updateOverride(
+        "tailor",
+        {
+          provider: config.default.provider,
+          api_key: config.default.api_key,
+          model: config.default.model
+        },
+        true,
+        fillOverride
+      )
     } else {
-      updateOverride("tailor", undefined)
+      updateOverride("tailor", undefined, false, fillOverride)
     }
   }
 
   function handleFillToggle(enabled: boolean) {
     setFillOverride(enabled)
     if (enabled) {
-      updateOverride("fill", {
-        provider: config.default.provider,
-        api_key: config.default.api_key,
-        model: config.default.model
-      })
+      updateOverride(
+        "fill",
+        {
+          provider: config.default.provider,
+          api_key: config.default.api_key,
+          model: config.default.model
+        },
+        tailorOverride,
+        true
+      )
     } else {
-      updateOverride("fill", undefined)
+      updateOverride("fill", undefined, tailorOverride, false)
+    }
+  }
+
+  async function runProbe(
+    key: "default" | "tailor" | "fill",
+    modelConfig: AIModelConfig,
+    label: string
+  ): Promise<ServiceCheckResult> {
+    setTestResults((prev) => ({
+      ...prev,
+      [key]: { status: "loading", message: `Testing ${label.toLowerCase()}...` }
+    }))
+    const client = await createApiClient()
+    const result = await client.testAI(modelConfig)
+    setTestResults((prev) => ({
+      ...prev,
+      [key]: {
+        status: result.connected ? "success" : "error",
+        message: result.message
+      }
+    }))
+    return result
+  }
+
+  async function handleTestActiveModels() {
+    const probes: Array<{
+      key: "default" | "tailor" | "fill"
+      label: string
+      config: AIModelConfig | undefined
+    }> = [
+      { key: "default", label: "Default", config: config.default }
+    ]
+
+    if (tailorOverride) {
+      probes.push({ key: "tailor", label: "Resume Tailoring", config: config.overrides?.tailor })
+    }
+    if (fillOverride) {
+      probes.push({ key: "fill", label: "Form Fill", config: config.overrides?.fill })
+    }
+
+    if (probes.some((probe) => !isModelConfigured(probe.config))) {
+      onStatusChange?.("missing")
+      setTestResults({
+        default: {
+          status: "error",
+          message: "Complete provider, model, and API key before testing."
+        }
+      })
+      return
+    }
+
+    setTestingActiveModels(true)
+    try {
+      let hasFailure = false
+      for (const probe of probes) {
+        const result = await runProbe(probe.key, probe.config as AIModelConfig, probe.label)
+        if (!result.connected) {
+          hasFailure = true
+        }
+      }
+      onStatusChange?.(hasFailure ? "error" : "healthy")
+    } catch {
+      setTestResults((prev) => ({
+        ...prev,
+        default: {
+          status: "error",
+          message: "Unexpected error while testing AI configuration."
+        }
+      }))
+      onStatusChange?.("error")
+    } finally {
+      setTestingActiveModels(false)
     }
   }
 
@@ -229,7 +412,6 @@ export function AIConfigCard({ onConfigChange }: AIConfigCardProps) {
           showKeyState={[showDefaultKey, setShowDefaultKey]}
         />
 
-        {/* Per-Feature Overrides */}
         <div className="border-t border-gray-200 pt-4">
           <button
             type="button"
@@ -245,7 +427,6 @@ export function AIConfigCard({ onConfigChange }: AIConfigCardProps) {
 
           {overridesOpen && (
             <div className="mt-3 space-y-4">
-              {/* Tailor Override */}
               <div className="space-y-3">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -270,7 +451,6 @@ export function AIConfigCard({ onConfigChange }: AIConfigCardProps) {
                 )}
               </div>
 
-              {/* Fill Override */}
               <div className="space-y-3">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -296,6 +476,33 @@ export function AIConfigCard({ onConfigChange }: AIConfigCardProps) {
               </div>
             </div>
           )}
+        </div>
+
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-text">Live AI Check</p>
+              <p className="text-xs text-text-muted">
+                Runs a tiny prompt that expects the exact response <code>OK</code>.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleTestActiveModels}
+              disabled={testingActiveModels}
+              className="btn-primary">
+              {testingActiveModels && (
+                <Loader className="w-4 h-4 animate-spin" />
+              )}
+              Test Active Models
+            </button>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            <StatusLine label="Default" result={testResults.default} />
+            {tailorOverride && <StatusLine label="Resume Tailoring" result={testResults.tailor} />}
+            {fillOverride && <StatusLine label="Form Fill" result={testResults.fill} />}
+          </div>
         </div>
       </div>
     </div>

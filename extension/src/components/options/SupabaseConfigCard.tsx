@@ -2,14 +2,15 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { Eye, EyeOff, CheckCircle, XCircle, Loader } from "lucide-react"
 import { getStorage, setStorage, type DBConfig } from "~lib/storage"
 import { createApiClient } from "~lib/api"
+import type { SetupStatus } from "./SetupProgress"
 
 interface SupabaseConfigCardProps {
-  onConfigChange?: (configured: boolean) => void
+  onStatusChange?: (status: SetupStatus) => void
 }
 
 type ConnectionStatus = "idle" | "loading" | "success" | "error"
 
-export function SupabaseConfigCard({ onConfigChange }: SupabaseConfigCardProps) {
+export function SupabaseConfigCard({ onStatusChange }: SupabaseConfigCardProps) {
   const [supabaseUrl, setSupabaseUrl] = useState("")
   const [supabaseKey, setSupabaseKey] = useState("")
   const [showKey, setShowKey] = useState(false)
@@ -18,17 +19,19 @@ export function SupabaseConfigCard({ onConfigChange }: SupabaseConfigCardProps) 
     useState<ConnectionStatus>("idle")
   const [connectionMessage, setConnectionMessage] = useState("")
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const onConfigChangeRef = useRef(onConfigChange)
-  onConfigChangeRef.current = onConfigChange
+  const onStatusChangeRef = useRef(onStatusChange)
+  onStatusChangeRef.current = onStatusChange
 
   useEffect(() => {
     getStorage("db_config").then((config) => {
       if (config) {
         setSupabaseUrl(config.supabase_url || "")
         setSupabaseKey(config.supabase_key || "")
-        onConfigChangeRef.current?.(
-          !!(config.supabase_url && config.supabase_key)
+        onStatusChangeRef.current?.(
+          config.supabase_url && config.supabase_key ? "configured" : "missing"
         )
+      } else {
+        onStatusChangeRef.current?.("missing")
       }
     })
   }, [])
@@ -40,12 +43,14 @@ export function SupabaseConfigCard({ onConfigChange }: SupabaseConfigCardProps) 
         await setStorage("db_config", config)
         setSavedIndicator(true)
         setTimeout(() => setSavedIndicator(false), 1500)
-        onConfigChange?.(
-          !!(config.supabase_url && config.supabase_key)
+        setConnectionStatus("idle")
+        setConnectionMessage("")
+        onStatusChange?.(
+          config.supabase_url && config.supabase_key ? "configured" : "missing"
         )
       }, 500)
     },
-    [onConfigChange]
+    [onStatusChange]
   )
 
   function handleUrlChange(value: string) {
@@ -66,9 +71,11 @@ export function SupabaseConfigCard({ onConfigChange }: SupabaseConfigCardProps) 
       const result = await client.testConnection()
       setConnectionStatus(result.connected ? "success" : "error")
       setConnectionMessage(result.message)
+      onStatusChange?.(result.connected ? "healthy" : "error")
     } catch {
       setConnectionStatus("error")
-      setConnectionMessage("Unexpected error — check console")
+      setConnectionMessage("Unexpected error while testing database")
+      onStatusChange?.("error")
     }
   }
 

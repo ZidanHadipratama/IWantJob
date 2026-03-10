@@ -5,6 +5,7 @@ import {
   ChevronUp,
   Trash2,
   ExternalLink,
+  FolderOpen,
   Briefcase,
   MapPin,
   Building2,
@@ -372,7 +373,7 @@ export default function JobTracker({ onOpenJob }: JobTrackerProps) {
                       </span>
                     </th>
                   ))}
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-text-secondary w-20">
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-text-secondary w-44">
                     Actions
                   </th>
                 </tr>
@@ -491,28 +492,44 @@ export default function JobTracker({ onOpenJob }: JobTrackerProps) {
                     </td>
                     <td className="px-4 py-3 text-right">
                       {deleteConfirm === job.id ? (
-                        <div className="inline-flex items-center gap-1">
+                        <div className="inline-flex items-center gap-2">
                           <button
                             onClick={stopAndRun(() => handleDelete(job.id))}
-                            className="text-xs text-red-600 hover:text-red-800 font-medium cursor-pointer"
+                            className="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:border-red-300 hover:text-red-800 cursor-pointer"
                           >
                             Confirm
                           </button>
                           <button
                             onClick={stopAndRun(() => setDeleteConfirm(null))}
-                            className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
+                            className="rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-700 cursor-pointer"
                           >
                             Cancel
                           </button>
                         </div>
                       ) : (
-                        <button
-                          onClick={stopAndRun(() => setDeleteConfirm(job.id))}
-                          className="text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
-                          title="Delete job"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="inline-flex items-center justify-end gap-2">
+                          <button
+                            onClick={stopAndRun(() => onOpenJob?.(job.id))}
+                            disabled={!onOpenJob}
+                            className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors ${
+                              onOpenJob
+                                ? "border-gray-200 text-text-secondary hover:border-primary-200 hover:text-primary cursor-pointer"
+                                : "border-gray-100 text-gray-300 cursor-not-allowed"
+                            }`}
+                            title="Open job details"
+                          >
+                            <FolderOpen className="w-3.5 h-3.5" />
+                            Open
+                          </button>
+                          <button
+                            onClick={stopAndRun(() => setDeleteConfirm(job.id))}
+                            className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-500 transition-colors hover:border-red-200 hover:text-red-600 cursor-pointer"
+                            title="Delete job"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>

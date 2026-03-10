@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react"
-import { FileText, Download, Loader, AlertCircle, CheckCircle, Copy, RefreshCw, ChevronDown, ChevronRight, Pencil, X, Plus, Trash2, Save } from "lucide-react"
-import { createApiClient, type QAPairItem } from "~lib/api"
+import { FileText, Download, Loader, AlertCircle, CheckCircle, Copy, RefreshCw, ChevronDown, ChevronRight, Pencil, X, Plus, Trash2 } from "lucide-react"
+import { createApiClient } from "~lib/api"
 import {
   getStorage,
+  type InFlightRequest,
   normalizeActiveJobContext,
   normalizeFillFormSession,
   normalizeResumeSession,
@@ -51,9 +52,28 @@ export default function Resume() {
   const [matchScore, setMatchScore] = useState(0)
   const [copied, setCopied] = useState(false)
   const [persistenceState, setPersistenceState] = useState<"draft" | "saved">("draft")
-  const [savingDraft, setSavingDraft] = useState(false)
   const [saveTone, setSaveTone] = useState<"neutral" | "success" | "error">("neutral")
   const [saveMessage, setSaveMessage] = useState("")
+
+  const applyResumeSession = useCallback((session: ReturnType<typeof normalizeResumeSession>) => {
+    if (!session) {
+      setLoading(false)
+      return
+    }
+
+    setPhase(session.phase as Phase)
+    setJobId(session.jobId || null)
+    setJdText(session.jdText)
+    setCompany(session.company)
+    setJobTitle(session.jobTitle)
+    setJobUrl(session.jobUrl)
+    setPageTitle(session.pageTitle || "")
+    setPageExcerpt(session.pageExcerpt || "")
+    setMetadataLines(Array.isArray(session.metadataLines) ? session.metadataLines : [])
+    setTailoredJson(session.tailoredJson as ResumeJSON | null)
+    setMatchScore(session.matchScore)
+    setLoading(session.inFlightRequest?.kind === "tailor_resume")
+  }, [])
 
   // Restore session on mount
   useEffect(() => {
@@ -68,16 +88,21 @@ export default function Resume() {
       const fillFormSession = normalizeFillFormSession(fillFormRaw)
 
       if (context) {
-        setPhase(context.phase as Phase)
-        setJobId(context.job_id || null)
-        setJdText(context.job_description)
-        setCompany(context.company)
-        setJobTitle(context.job_title)
-        setJobUrl(context.job_url)
-        setPageTitle(context.page_title || "")
-        setPageExcerpt(context.page_excerpt || "")
-        setMetadataLines(Array.isArray(context.metadata_lines) ? context.metadata_lines : [])
-        setTailoredJson((context.tailored_resume_json as ResumeJSON | null) || null)
+        if (session) {
+          applyResumeSession(session)
+        } else {
+          setPhase(context.phase as Phase)
+          setJobId(context.job_id || null)
+          setJdText(context.job_description)
+          setCompany(context.company)
+          setJobTitle(context.job_title)
+          setJobUrl(context.job_url)
+          setPageTitle(context.page_title || "")
+          setPageExcerpt(context.page_excerpt || "")
+          setMetadataLines(Array.isArray(context.metadata_lines) ? context.metadata_lines : [])
+          setTailoredJson((context.tailored_resume_json as ResumeJSON | null) || null)
+          setLoading(false)
+        }
         setPersistenceState(context.persistence_state || "draft")
         setMatchScore(session?.matchScore || 0)
         debug("Resume", "Restored active job context, phase:", context.phase)
@@ -90,41 +115,43 @@ export default function Resume() {
       }
 
       if (session && session.phase !== "idle") {
-        setPhase(session.phase as Phase)
-        setJobId(session.jobId || null)
-        setJdText(session.jdText)
-        setCompany(session.company)
-        setJobTitle(session.jobTitle)
-        setJobUrl(session.jobUrl)
-        setPageTitle(session.pageTitle || "")
-        setPageExcerpt(session.pageExcerpt || "")
-        setMetadataLines(Array.isArray(session.metadataLines) ? session.metadataLines : [])
-        setTailoredJson(session.tailoredJson as ResumeJSON | null)
-        setMatchScore(session.matchScore)
+        applyResumeSession(session)
         setPersistenceState("draft")
         debug("Resume", "Restored session, phase:", session.phase)
       }
     })
-  }, [])
+  }, [applyResumeSession])
 
   useEffect(() => {
     function handleStorageChange(
       changes: Record<string, chrome.storage.StorageChange>,
       areaName: string
     ) {
-      if (areaName !== "local" || !changes.active_job_context) return
-      const nextContext = normalizeActiveJobContext(changes.active_job_context.newValue)
-      setJobId(nextContext?.job_id || null)
-      setPersistenceState(nextContext?.persistence_state || "draft")
-      if (nextContext?.persistence_state === "draft") {
-        setSaveTone("neutral")
-        setSaveMessage("")
+      if (areaName !== "local") return
+
+      if (changes.resume_session) {
+        const nextSession = normalizeResumeSession(changes.resume_session.newValue)
+        if (nextSession) {
+          applyResumeSession(nextSession)
+        } else {
+          setLoading(false)
+        }
+      }
+
+      if (changes.active_job_context) {
+        const nextContext = normalizeActiveJobContext(changes.active_job_context.newValue)
+        setJobId(nextContext?.job_id || null)
+        setPersistenceState(nextContext?.persistence_state || "draft")
+        if (nextContext?.persistence_state === "draft") {
+          setSaveTone("neutral")
+          setSaveMessage("")
+        }
       }
     }
 
     chrome.storage.onChanged.addListener(handleStorageChange)
     return () => chrome.storage.onChanged.removeListener(handleStorageChange)
-  }, [])
+  }, [applyResumeSession])
 
   // Save session whenever state changes
   const saveSession = useCallback((
@@ -138,12 +165,13 @@ export default function Resume() {
     pe: string,
     ml: string[],
     tj: ResumeJSON | null,
-    ms: number
+    ms: number,
+    inFlightRequest: InFlightRequest | null = null
   ) => {
-    setStorage("resume_session", {
+    return setStorage("resume_session", {
       phase: p, jobId: id, jdText: jd, company: co, jobTitle: jt, jobUrl: ju,
       pageTitle: pt, pageExcerpt: pe, metadataLines: ml,
-      tailoredJson: tj, matchScore: ms,
+      tailoredJson: tj, matchScore: ms, inFlightRequest
     })
   }, [])
 
@@ -243,14 +271,31 @@ export default function Resume() {
   }
 
   async function handleTailor() {
+    const requestId = crypto.randomUUID()
     setLoading(true)
     setError("")
+    let shouldClearLoading = false
     try {
       const resumeJson = await getStorage("base_resume_json")
       if (!resumeJson) {
         setError("No resume found. Go to Settings and add your base resume first.")
         return
       }
+
+      await saveSession(
+        "extracted",
+        jobId,
+        jdText,
+        company,
+        jobTitle,
+        jobUrl,
+        pageTitle,
+        pageExcerpt,
+        metadataLines,
+        tailoredJson,
+        matchScore,
+        { id: requestId, kind: "tailor_resume" }
+      )
 
       const client = await createApiClient()
       const companyName = company || "Unknown Company"
@@ -277,6 +322,11 @@ export default function Resume() {
       const json = tailorResult.tailored_resume_json as ResumeJSON
       const resolvedCompany = tailorResult.job_info?.company || companyName
       const resolvedTitle = tailorResult.job_info?.title || title
+      const latestSession = normalizeResumeSession(await getStorage("resume_session"))
+      if (latestSession?.inFlightRequest?.id !== requestId) {
+        debug("Resume", "Ignoring stale tailor response for request", requestId)
+        return
+      }
       await Promise.all([
         setStorage("fillform_session", null),
         setStorage("active_job_context", null)
@@ -291,7 +341,7 @@ export default function Resume() {
       setSaveTone("neutral")
       setSaveMessage("")
       setPhase("tailored")
-      saveSession(
+      await saveSession(
         "tailored",
         resolvedJobId,
         jdText,
@@ -302,13 +352,35 @@ export default function Resume() {
         pageExcerpt,
         metadataLines,
         json,
-        tailorResult.match_score
+        tailorResult.match_score,
+        null
       )
+      shouldClearLoading = true
     } catch (err) {
       debugError("Resume", "Tailor failed:", err)
+      const latestSession = normalizeResumeSession(await getStorage("resume_session"))
+      if (latestSession?.inFlightRequest?.id === requestId) {
+        await saveSession(
+          "extracted",
+          jobId,
+          jdText,
+          company,
+          jobTitle,
+          jobUrl,
+          pageTitle,
+          pageExcerpt,
+          metadataLines,
+          tailoredJson,
+          matchScore,
+          null
+        )
+        shouldClearLoading = true
+      }
       setError(err instanceof Error ? err.message : "Failed to tailor resume")
     } finally {
-      setLoading(false)
+      if (shouldClearLoading) {
+        setLoading(false)
+      }
     }
   }
 
@@ -392,84 +464,10 @@ export default function Resume() {
     setTailoredJson(nextResume)
   }
 
-  async function handleSaveDraft() {
-    setSavingDraft(true)
-    setSaveTone("neutral")
-    setSaveMessage("")
-    try {
-      const activeContext = normalizeActiveJobContext(await getStorage("active_job_context"))
-      if (!activeContext || activeContext.phase !== "tailored" || !activeContext.tailored_resume_json) {
-        setSaveTone("error")
-        setSaveMessage("Tailor the resume first before saving to the tracker.")
-        return
-      }
-
-      const client = await createApiClient()
-      const qaPairs: QAPairItem[] = activeContext.draft_qa_pairs.map((pair) => ({
-        field_id: pair.field_id,
-        question: pair.label,
-        answer: pair.answer,
-        field_type: pair.field_type,
-        edited_by_user: true
-      }))
-
-      const result = await client.saveApplicationDraft({
-        job_id: activeContext.job_id || undefined,
-        company: activeContext.company || "Unknown Company",
-        title: activeContext.job_title || "Unknown Position",
-        url: activeContext.job_url || undefined,
-        job_description: activeContext.job_description,
-        tailored_resume_json: activeContext.tailored_resume_json,
-        qa_pairs: qaPairs
-      })
-
-      const savedJobId = result.job.id
-      setJobId(savedJobId)
-      setPersistenceState("saved")
-      setCompany(result.job.company)
-      setJobTitle(result.job.title)
-      setSaveTone("success")
-      setSaveMessage(
-        result.qa_pairs.length > 0
-          ? `Saved to tracker with ${result.qa_pairs.length} reviewed answer${result.qa_pairs.length === 1 ? "" : "s"}.`
-          : "Saved to tracker."
-      )
-
-      await Promise.all([
-        setStorage("active_job_context", {
-          ...activeContext,
-          job_id: savedJobId,
-          company: result.job.company,
-          job_title: result.job.title,
-          persistence_state: "saved"
-        }),
-        setStorage("resume_session", {
-          phase,
-          jobId: savedJobId,
-          jdText,
-          company: result.job.company,
-          jobTitle: result.job.title,
-          jobUrl,
-          pageTitle,
-          pageExcerpt,
-          metadataLines,
-          tailoredJson: activeContext.tailored_resume_json,
-          matchScore
-        })
-      ])
-    } catch (err) {
-      debugError("Resume", "Save draft failed:", err)
-      setSaveTone("error")
-      setSaveMessage(err instanceof Error ? err.message : "Failed to save draft to tracker")
-    } finally {
-      setSavingDraft(false)
-    }
-  }
-
   function handleReset() {
     setPhase("idle"); setJobId(null); setJdText(""); setCompany(""); setJobTitle("")
     setJobUrl(""); setPageTitle(""); setPageExcerpt(""); setMetadataLines([])
-    setTailoredJson(null); setMatchScore(0); setError("")
+    setTailoredJson(null); setMatchScore(0); setError(""); setLoading(false)
     setPersistenceState("draft")
     setSaveTone("neutral")
     setSaveMessage("")
@@ -483,6 +481,10 @@ export default function Resume() {
     phase !== "idle" && !company.trim() && !jobTitle.trim()
       ? "Page metadata is missing for this draft. Review the title and company carefully before saving."
       : ""
+
+  async function handleContinueToFillForm() {
+    await setStorage("sidepanel_active_tab", "fill-form")
+  }
 
   return (
     <div className="space-y-4">
@@ -592,27 +594,14 @@ export default function Resume() {
           </div>
           <p className="text-xs text-text-muted text-center">Click any text to edit before downloading</p>
           <button
-            onClick={handleSaveDraft}
-            disabled={savingDraft}
+            onClick={handleContinueToFillForm}
             className="btn-primary w-full flex items-center justify-center gap-2">
-            {savingDraft ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {savingDraft
-              ? "Saving..."
-              : persistenceState === "saved"
-                ? "Save Updates to Tracker"
-                : "Save to Tracker"}
+            <CheckCircle className="w-4 h-4" />
+            Continue to Fill Form
           </button>
-          {saveMessage && (
-            <p className={`text-xs text-center ${
-              saveTone === "error"
-                ? "text-red-600"
-                : saveTone === "success"
-                  ? "text-green-700"
-                  : "text-text-muted"
-            }`}>
-              {saveMessage}
-            </p>
-          )}
+          <p className="text-xs text-text-muted text-center">
+            Review answers, autofill the page, and save to the tracker from the Fill Form tab.
+          </p>
           <div className="flex gap-2">
             <button onClick={handleCopy}
               className="btn-primary flex-1 flex items-center justify-center gap-2">

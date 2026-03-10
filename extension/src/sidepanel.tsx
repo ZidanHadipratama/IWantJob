@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { ClipboardList, FileText, LayoutGrid, Bug } from "lucide-react"
+import { ClipboardList, FileText, LayoutGrid } from "lucide-react"
 
 import "./style.css"
 
@@ -7,84 +7,54 @@ import FillForm from "./components/sidepanel/FillForm"
 import Resume from "./components/sidepanel/Resume"
 import TrackerTable from "./components/sidepanel/TrackerTable"
 import { debug } from "~lib/debug"
-import { getStorage, normalizeActiveJobContext, type ActiveJobContext } from "~lib/storage"
+import { getStorage, normalizeActiveJobContext, setStorage, type ActiveJobContext } from "~lib/storage"
 
-type Tab = "fill-form" | "resume" | "tracker" | "debug"
+type Tab = "fill-form" | "resume" | "tracker"
 
 const tabs: { id: Tab; label: string; icon: typeof ClipboardList }[] = [
   { id: "resume", label: "Resume", icon: FileText },
   { id: "fill-form", label: "Fill Form", icon: ClipboardList },
   { id: "tracker", label: "Tracker", icon: LayoutGrid },
-  { id: "debug", label: "Logs", icon: Bug },
 ]
-
-function DebugPanel() {
-  const [logs, setLogs] = useState<string[]>([])
-
-  function loadLogs() {
-    chrome.storage.local.get("debug_log", (result) => {
-      setLogs(result.debug_log || [])
-    })
-  }
-
-  function clearLogs() {
-    chrome.storage.local.remove("debug_log", () => {
-      setLogs([])
-    })
-  }
-
-  useEffect(() => {
-    loadLogs()
-    // Auto-refresh every 2s
-    const interval = setInterval(loadLogs, 2000)
-    return () => clearInterval(interval)
-  }, [])
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-text">Debug Logs</h2>
-        <div className="flex gap-2">
-          <button onClick={loadLogs} className="text-xs text-primary hover:text-primary-700 font-medium cursor-pointer">
-            Refresh
-          </button>
-          <button onClick={clearLogs} className="text-xs text-red-500 hover:text-red-700 font-medium cursor-pointer">
-            Clear
-          </button>
-        </div>
-      </div>
-      {logs.length === 0 ? (
-        <p className="text-xs text-text-muted">No logs yet. Click buttons in other tabs to generate logs.</p>
-      ) : (
-        <div className="bg-gray-900 rounded-lg p-3 max-h-[calc(100vh-120px)] overflow-y-auto">
-          {logs.map((line, i) => (
-            <pre key={i} className={`text-xs font-mono whitespace-pre-wrap break-all mb-0.5 ${
-              line.includes("[ERROR") ? "text-red-400" : "text-green-400"
-            }`}>{line}</pre>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 function SidePanel() {
   const [context, setContext] = useState<ActiveJobContext | null>(null)
+  const [activeTab, setActiveTab] = useState<Tab>("resume")
 
   useEffect(() => {
     debug("SidePanel", "Mounted")
 
     let mounted = true
-    getStorage("active_job_context").then((value) => {
-      if (mounted) setContext(normalizeActiveJobContext(value))
+    Promise.all([
+      getStorage("active_job_context"),
+      getStorage("sidepanel_active_tab")
+    ]).then(([value, savedTab]) => {
+      if (!mounted) return
+      setContext(normalizeActiveJobContext(value))
+      if (savedTab === "resume" || savedTab === "fill-form" || savedTab === "tracker") {
+        setActiveTab(savedTab)
+      } else if (savedTab) {
+        void setStorage("sidepanel_active_tab", "resume")
+      }
     })
 
     function handleStorageChange(
       changes: Record<string, chrome.storage.StorageChange>,
       areaName: string
     ) {
-      if (areaName !== "local" || !changes.active_job_context) return
-      setContext(normalizeActiveJobContext(changes.active_job_context.newValue))
+      if (areaName !== "local") return
+      if (changes.active_job_context) {
+        setContext(normalizeActiveJobContext(changes.active_job_context.newValue))
+      }
+      if (changes.sidepanel_active_tab) {
+        const nextTab = changes.sidepanel_active_tab.newValue
+        if (nextTab === "resume" || nextTab === "fill-form" || nextTab === "tracker") {
+          setActiveTab(nextTab)
+        } else {
+          setActiveTab("resume")
+          void setStorage("sidepanel_active_tab", "resume")
+        }
+      }
     }
 
     chrome.storage.onChanged.addListener(handleStorageChange)
@@ -93,8 +63,6 @@ function SidePanel() {
       chrome.storage.onChanged.removeListener(handleStorageChange)
     }
   }, [])
-
-  const [activeTab, setActiveTab] = useState<Tab>("resume")
   const statusTone = !context
     ? "border-slate-200 bg-slate-50 text-text-muted"
     : context.phase !== "tailored"
@@ -119,7 +87,10 @@ function SidePanel() {
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id)
+                setStorage("sidepanel_active_tab", tab.id)
+              }}
               className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-semibold transition-colors duration-150 cursor-pointer ${
                 isActive
                   ? "border-b-2 border-primary text-primary"
@@ -139,7 +110,6 @@ function SidePanel() {
         {activeTab === "fill-form" && <FillForm />}
         {activeTab === "resume" && <Resume />}
         {activeTab === "tracker" && <TrackerTable />}
-        {activeTab === "debug" && <DebugPanel />}
       </main>
     </div>
   )

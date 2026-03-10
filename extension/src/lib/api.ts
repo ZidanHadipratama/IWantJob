@@ -103,8 +103,15 @@ export interface DraftSaveResult {
   resume_saved: boolean
 }
 
+export interface ServiceCheckResult {
+  connected: boolean
+  message: string
+}
+
 export interface ApiClient {
-  testConnection(): Promise<{ connected: boolean; message: string }>
+  testBackendHealth(): Promise<ServiceCheckResult>
+  testConnection(): Promise<ServiceCheckResult>
+  testAI(modelOverride?: AIModelConfig): Promise<ServiceCheckResult>
   saveResumeText(text: string): Promise<{ resume_text: string; message: string }>
   parseResume(
     text: string
@@ -224,6 +231,34 @@ export async function createApiClient(): Promise<ApiClient> {
   }
 
   return {
+    async testBackendHealth() {
+      try {
+        const res = await fetch(`${backendUrl}/health`, {
+          method: "GET"
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          return {
+            connected: false,
+            message: body?.detail || `Server returned ${res.status}`
+          }
+        }
+        const data = await res.json().catch(() => ({}))
+        return {
+          connected: data?.status === "ok",
+          message: data?.message || "Backend is reachable"
+        }
+      } catch (err) {
+        return {
+          connected: false,
+          message:
+            err instanceof Error
+              ? err.message
+              : "Network error — is the backend running?"
+        }
+      }
+    },
+
     async testConnection() {
       try {
         const res = await fetch(`${backendUrl}/test-connection`, {
@@ -241,6 +276,39 @@ export async function createApiClient(): Promise<ApiClient> {
         return {
           connected: true,
           message: data?.message || "Connected successfully"
+        }
+      } catch (err) {
+        return {
+          connected: false,
+          message:
+            err instanceof Error
+              ? err.message
+              : "Network error — is the backend running?"
+        }
+      }
+    },
+
+    async testAI(modelOverride) {
+      try {
+        const model = modelOverride || aiConfig.default
+        const res = await fetch(`${backendUrl}/test-ai`, {
+          method: "GET",
+          headers: {
+            ...baseHeaders(),
+            ...aiHeaders(model)
+          }
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          return {
+            connected: false,
+            message: body?.detail || `Server returned ${res.status}`
+          }
+        }
+        const data = await res.json()
+        return {
+          connected: !!data?.connected,
+          message: data?.message || "AI test completed"
         }
       } catch (err) {
         return {
