@@ -119,6 +119,23 @@ The implementation has already reached:
 
 The repository now has a public-facing setup guide and a screenshot-backed workflow overview. The remaining documentation work is mostly publish-readiness polish around sharing and safe push boundaries.
 
+## License
+
+This repository is licensed under the GNU Affero General Public License v3.0.
+See [LICENSE](./LICENSE).
+
+That means:
+
+- You can self-host, modify, and redistribute this code
+- If you run a modified version for users over a network, you must offer the corresponding source code for that modified version
+- The repository license does not grant rights to the `IWantJob` name, logo, or product branding
+
+See [TRADEMARKS.md](./TRADEMARKS.md) for the branding policy.
+
+The paid hosted service can still include separate infrastructure, secrets,
+model/provider accounts, prompts, deployment automation, and operational
+services that are not part of this repository.
+
 ## Setup
 
 ### 1. Clone and install dependencies
