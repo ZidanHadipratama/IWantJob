@@ -1,19 +1,34 @@
-<p>
-  <img src="extension/assets/icon.png" alt="IWantJob logo" width="56" height="56">
+<div align="center">
+  <img src="assets/brand/iw-mark.svg" alt="IWantJob logo" width="112" height="112">
+  <h1>IWantJob</h1>
+  <p><strong>Open-source Chrome extension + FastAPI backend for AI-assisted job applications.</strong></p>
+  <p>
+  <img alt="Chrome extension" src="https://img.shields.io/badge/Chrome-Extension-0F766E?style=flat-square">
+  <img alt="Backend" src="https://img.shields.io/badge/FastAPI-Backend-0D9488?style=flat-square">
+  <img alt="Workflow" src="https://img.shields.io/badge/Workflow-Draft--first-134E4A?style=flat-square">
+  <img alt="Stack" src="https://img.shields.io/badge/Stack-BYO%20AI%20%2B%20Supabase-115E59?style=flat-square">
 </p>
+</div>
 
-# IWantJob
-
-IWantJob is an open-source Chrome extension plus FastAPI backend for AI-assisted job applications.
-
-It is built for a review-first workflow:
-- extract the job description from the current tab
+IWantJob is built for a review-first workflow:
+- extract a job description from the current tab
 - tailor a resume to the role
-- generate draft form answers
-- autofill supported fields in the browser
+- generate draft answers for application forms
+- autofill supported controls in the browser
 - save only the reviewed application into a tracker and detail workspace
 
 The product is intentionally draft-first. AI output is editable before it touches the tracker, so the saved record reflects the application you approved, not the model's first pass.
+
+## Quick Links
+
+- [Why It Exists](#why-it-exists)
+- [What You Can Do](#what-you-can-do)
+- [How It Works](#how-it-works)
+- [Screenshots](#screenshots)
+- [Run Locally](#run-locally)
+- [Development](#development)
+- [Architecture](#architecture)
+- [License](#license)
 
 ## Why It Exists
 
@@ -28,9 +43,18 @@ IWantJob is designed around those edges. It keeps the useful AI steps, but adds 
 - iframe and custom-form handling
 - a real tracker and job detail workspace
 
-## Product Surface
+## What You Can Do
 
-### Core flow
+- Extract job descriptions from the active tab
+- Tailor a resume against a specific role
+- Generate draft Q&A for application forms
+- Autofill supported text, select, radio, checkbox, file, custom combobox, and iframe-hosted form flows
+- Keep AI output editable before save
+- Use optional persona context to improve answer framing
+- Save approved applications into a Supabase-backed tracker
+- Open saved applications in a detail workspace with notes, resume, Q&A, and structured JD data
+
+## How It Works
 
 `Resume` -> `Fill Form` -> `Save to Tracker`
 
@@ -40,17 +64,6 @@ IWantJob is designed around those edges. It keeps the useful AI steps, but adds 
 4. Review and edit everything locally.
 5. Autofill supported controls if it helps.
 6. Save the approved application into the tracker.
-
-### What it does
-
-- Extracts job descriptions from the current tab
-- Tailors a resume against a specific role
-- Generates draft Q&A for application forms
-- Autofills supported text, select, radio, checkbox, file, custom combobox, and iframe-hosted form flows
-- Keeps AI output editable before save
-- Uses optional persona context to improve answer framing
-- Saves approved applications into a Supabase-backed tracker
-- Opens saved applications in a detail workspace with notes, resume, Q&A, and structured JD data
 
 ## Screenshots
 
@@ -74,7 +87,7 @@ These screenshots were captured from the current UI with Playwright.
 </p>
 <p><strong>Tracker detail workspace</strong><br>Once saved, each application opens in a richer workspace for status updates, notes, saved Q&amp;A, and resume review.</p>
 
-## Product Areas
+## Product Surface
 
 ### Sidepanel
 
@@ -100,30 +113,15 @@ IWantJob uses a Bring-Your-Own stack:
 - your Supabase project
 - your local backend process
 
-## Architecture
-
-The project has 3 main pieces:
-
-- `extension/`
-  Plasmo-based Chrome extension with content scripts, sidepanel UI, and options page
-
-- `backend/`
-  FastAPI service for AI calls, PDF generation, and Supabase-backed persistence
-
-- `supabase/`
-  SQL migrations for the user-owned database schema
-
-## Repository Layout
-
-```text
-IWantJob/
-├── extension/   # Chrome extension (Plasmo + React + TypeScript)
-├── backend/     # FastAPI backend
-├── supabase/    # DB migrations
-└── assets/      # Public README images and demo assets
-```
-
 ## Run Locally
+
+### Prerequisites
+
+- Node.js + npm
+- Python 3.11+
+- a Supabase project
+- an AI provider key
+- Chrome or Chromium for the extension
 
 ### 1. Install dependencies
 
@@ -231,24 +229,9 @@ The product currently expects a Bring-Your-Own setup:
 - your Supabase project
 - your AI credentials
 
-## License
+## Development
 
-This repository is licensed under the GNU Affero General Public License v3.0.
-See [LICENSE](./LICENSE).
-
-That means:
-
-- You can self-host, modify, and redistribute this code
-- If you run a modified version for users over a network, you must offer the corresponding source code for that modified version
-- The repository license does not grant rights to the `IWantJob` name, logo, or product branding
-
-See [TRADEMARKS.md](./TRADEMARKS.md) for the branding policy.
-
-The paid hosted service can still include separate infrastructure, secrets,
-model/provider accounts, prompts, deployment automation, and operational
-services that are not part of this repository.
-
-### 6. Run Playwright smoke tests
+### Playwright smoke tests
 
 From `extension/`:
 
@@ -271,106 +254,37 @@ On WSL, headed mode requires GUI support such as WSLg or an X server with `DISPL
 npx playwright install --with-deps chromium
 ```
 
-## How To Use
+## Architecture
 
-### Initial bootstrap
+The project has 3 main pieces:
 
-1. Start the backend
-2. Load the unpacked extension
-3. Open the options page
-4. Configure backend URL, Supabase, AI model, and base resume
+- `extension/` — Plasmo-based Chrome extension with content scripts, sidepanel UI, and options page
+- `backend/` — FastAPI service for AI calls, PDF generation, and Supabase-backed persistence
+- `supabase/` — SQL migrations for the user-owned database schema
 
-### Normal application workflow
+## Repository Layout
 
-1. Open a job description page
-2. Open the extension sidepanel
-3. In `Resume`, click `Get Job Description`
-4. Review the extracted JD and click `Tailor Resume`
-5. Edit the tailored resume locally if needed
-6. Switch to `Fill Form`
-7. Click `Get Form Fields`
-8. Generate draft answers and edit them locally
-9. Use `Autofill Form` for supported controls if helpful
-10. Click `Save to Tracker` from `Fill Form`
-
-Important:
-
-- tailoring does not save automatically
-- form generation does not save automatically
-- autofill does not save automatically
-- the tracker is meant to contain reviewed application records only
-
-### After saving
-
-Once a draft is saved:
-
-- the tracker row appears in the options page
-- the detail workspace can show:
-  - job description
-  - tailored resume
-  - saved Q&A
-  - notes
-  - status
-
-## Troubleshooting
-
-### The sidepanel cannot reach the backend
-
-Check:
-
-- the backend process is running
-- the backend URL in extension settings is correct
-- the backend is reachable at `http://localhost:8000/health`
-
-### Tailor Resume or Fill Form does nothing useful
-
-Check:
-
-- an AI provider/model/key is configured
-- a base resume is saved in settings
-- persona is optional, so missing persona is not a blocker
-- the page actually contains a readable JD or form
-
-### Autofill only partially works
-
-This is expected on some job sites.
-
-Check:
-
-- some fields are intentionally left for manual review
-- composite phone fields and custom upload widgets may require manual input
-- large choice sets may be skipped unless you explicitly include selected flagged fields
-- embedded forms inside iframes are supported, but some hosts still use custom widgets the browser cannot safely control
-
-### The tracker still shows nothing
-
-Check:
-
-- you clicked `Save to Tracker`
-- Supabase URL/key are configured
-- the backend can talk to Supabase
-
-### Chrome is still showing old UI code
-
-Rebuild and reload the extension:
-
-```bash
-cd extension
-npm run build
+```text
+IWantJob/
+├── extension/   # Chrome extension (Plasmo + React + TypeScript)
+├── backend/     # FastAPI backend
+├── supabase/    # DB migrations
+└── assets/      # Public README images and demo assets
 ```
 
-Then reload the unpacked extension in `chrome://extensions`.
+## License
 
-### The product feels stuck between draft and saved state
+This repository is licensed under the GNU Affero General Public License v3.0.
+See [LICENSE](./LICENSE).
 
-This is usually a workflow issue, not a model issue:
+That means:
 
-- `Resume` and `Fill Form` create local drafts first
-- only `Save to Tracker` writes the reviewed application to Supabase
-- after new edits, a saved application can re-enter unsaved draft state until you save again
+- You can self-host, modify, and redistribute this code
+- If you run a modified version for users over a network, you must offer the corresponding source code for that modified version
+- The repository license does not grant rights to the `IWantJob` name, logo, or product branding
 
-## Notes
+See [TRADEMARKS.md](./TRADEMARKS.md) for the branding policy.
 
-- This is not a hosted SaaS product. You are expected to run the backend and provide your own credentials.
-- The backend has a verified Docker path, but the Chrome extension still runs as a normal unpacked extension in your local browser.
-- The current build flow uses `npm run build` for the extension.
+The paid hosted service can still include separate infrastructure, secrets,
+model/provider accounts, prompts, deployment automation, and operational
+services that are not part of this repository.
