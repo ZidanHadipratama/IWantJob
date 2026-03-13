@@ -4,6 +4,56 @@ export interface FormFieldOption {
   selector?: string
 }
 
+export interface ResumeContact {
+  name?: string
+  email?: string
+  phone?: string
+  location?: string
+  linkedin?: string
+  github?: string
+  website?: string
+  work_authorization?: string
+}
+
+export interface ResumeSkills {
+  languages?: string[]
+  frameworks?: string[]
+  tools?: string[]
+  other?: string[]
+}
+
+export interface ResumeSectionEntry {
+  heading: string
+  subheading?: string
+  dates?: string
+  location?: string
+  url?: string
+  bullets: string[]
+}
+
+export interface ResumeSection {
+  title: string
+  entries: ResumeSectionEntry[]
+}
+
+export interface ResumeJson {
+  contact: ResumeContact
+  summary?: string
+  skills?: ResumeSkills
+  sections: ResumeSection[]
+}
+
+export interface StructuredJobDescription {
+  role_focus?: string | null
+  must_have_skills: string[]
+  preferred_skills: string[]
+  responsibilities: string[]
+  domain_keywords: string[]
+  seniority?: string | null
+  work_mode?: string | null
+  employment_type?: string | null
+}
+
 export type FormFieldAISkipKind =
   | "oversized-options"
   | "noisy-label"

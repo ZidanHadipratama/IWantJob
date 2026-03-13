@@ -19,11 +19,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("iwantjob")
 
-# Full AI logs — file only, no terminal
-_full_ai_logger = logging.getLogger("iwantjob.ai.full")
-_full_ai_logger.propagate = False  # don't send to terminal
-_full_ai_logger.addHandler(logging.FileHandler(LOG_FILE, mode="a", encoding="utf-8"))
-
 app = FastAPI(title="IWantJob API", version="0.1.0")
 
 app.add_middleware(

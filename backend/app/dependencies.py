@@ -1,9 +1,27 @@
 """FastAPI dependencies for Supabase header extraction and client creation."""
+import base64
 from dataclasses import dataclass
+import json
 
 from fastapi import HTTPException
 from starlette.requests import Request
 from supabase import create_client, Client
+
+
+def _decode_supabase_role(key: str) -> str | None:
+    """Decode the Supabase JWT role claim without verifying the signature."""
+    try:
+        parts = key.split(".")
+        if len(parts) != 3:
+            return None
+        payload = parts[1]
+        padding = "=" * (-len(payload) % 4)
+        decoded = base64.urlsafe_b64decode(payload + padding)
+        data = json.loads(decoded.decode("utf-8"))
+        role = data.get("role")
+        return role if isinstance(role, str) else None
+    except Exception:
+        return None
 
 
 def get_supabase_client(request: Request) -> Client:
@@ -18,6 +36,16 @@ def get_supabase_client(request: Request) -> Client:
     key = request.headers.get("x-supabase-key")
     if not key:
         raise HTTPException(status_code=400, detail="Missing X-Supabase-Key header")
+
+    role = _decode_supabase_role(key)
+    if role != "service_role":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Current pre-auth mode requires a Supabase service role key "
+                "so the backend can enforce user scoping with X-User-Id"
+            ),
+        )
 
     return create_client(url, key)
 

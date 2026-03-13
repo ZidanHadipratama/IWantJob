@@ -5,6 +5,12 @@ import {
   type AIConfig,
   type AIModelConfig
 } from "./storage"
+import type {
+  AutofillAnswerInput,
+  FormField,
+  ResumeJson,
+  StructuredJobDescription
+} from "./types"
 
 const DEFAULT_BACKEND_URL = "http://localhost:8000"
 
@@ -22,7 +28,7 @@ export interface ResumeRecord {
   id?: string
   job_id?: string | null
   resume_text?: string
-  resume_json?: object | null
+  resume_json?: ResumeJson | null
   pdf_url?: string | null
   is_base: boolean
   created_at: string
@@ -100,17 +106,6 @@ export interface TailorJobInfo {
   salary_range?: string
 }
 
-export interface StructuredJobDescription {
-  role_focus?: string | null
-  must_have_skills: string[]
-  preferred_skills: string[]
-  responsibilities: string[]
-  domain_keywords: string[]
-  seniority?: string | null
-  work_mode?: string | null
-  employment_type?: string | null
-}
-
 export interface DraftSaveResult {
   job: JobMutationResult
   qa_pairs: QAPairItem[]
@@ -129,12 +124,12 @@ export interface ApiClient {
   saveResumeText(text: string): Promise<{ resume_text: string; message: string }>
   parseResume(
     text: string
-  ): Promise<{ resume_json: object; message: string }>
-  saveResumeJson(json: object): Promise<{ resume_json: object; message: string }>
+  ): Promise<{ resume_json: ResumeJson; message: string }>
+  saveResumeJson(json: ResumeJson): Promise<{ resume_json: ResumeJson; message: string }>
   tailorResume(req: {
     job_description: string
     resume_text?: string
-    resume_json?: object
+    resume_json?: ResumeJson
     company?: string
     title?: string
     url?: string
@@ -144,22 +139,22 @@ export interface ApiClient {
     persist_job?: boolean
     job_id?: string
   }): Promise<{
-    tailored_resume_json: object
+    tailored_resume_json: ResumeJson
     job_info: TailorJobInfo
     structured_job_description?: StructuredJobDescription
     match_score: number
     job_id?: string
   }>
-  generatePdf(resumeJson: object): Promise<Blob>
+  generatePdf(resumeJson: ResumeJson): Promise<Blob>
   fillForm(req: {
-    form_fields: object[]
+    form_fields: FormField[]
     resume_text?: string
-    resume_json?: object
+    resume_json?: ResumeJson
     persona_text?: string
     job_id?: string
     job_description?: string
     structured_job_description?: StructuredJobDescription
-  }): Promise<{ answers: object[]; job_id?: string; qa_saved: boolean }>
+  }): Promise<{ answers: AutofillAnswerInput[]; job_id?: string; qa_saved: boolean }>
   saveApplicationDraft(req: {
     job_id?: string
     company: string
@@ -173,7 +168,7 @@ export interface ApiClient {
     salary_range?: string
     structured_job_description?: StructuredJobDescription
     notes?: string
-    tailored_resume_json: object
+    tailored_resume_json: ResumeJson
     qa_pairs?: QAPairItem[]
   }): Promise<DraftSaveResult>
   logJob(req: {
@@ -382,7 +377,7 @@ export async function createApiClient(): Promise<ApiClient> {
       return await res.json()
     },
 
-    async saveResumeJson(json: object) {
+    async saveResumeJson(json: ResumeJson) {
       const res = await fetch(`${backendUrl}/save-resume-json`, {
         method: "POST",
         headers: {
@@ -450,7 +445,7 @@ export async function createApiClient(): Promise<ApiClient> {
       return await res.json()
     },
 
-    async generatePdf(resumeJson: object) {
+    async generatePdf(resumeJson: ResumeJson) {
       const res = await fetch(`${backendUrl}/generate-pdf`, {
         method: "POST",
         headers: {

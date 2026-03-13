@@ -13,17 +13,15 @@ import { debug, debugError } from "~lib/debug"
 import { sendToContentScript } from "~lib/messaging"
 import type {
   AutofillFormResponse,
+  AutofillAnswerInput,
   AutofillResultItem,
   AutofillResumeFilePayload,
   ExtractFormResponse,
-  FormField
+  FormField,
+  ResumeJson
 } from "~lib/types"
 
-interface AnswerCard {
-  field_id: string
-  label: string
-  answer: string
-  field_type: string
+interface AnswerCard extends AutofillAnswerInput {
   copied: boolean
 }
 
@@ -178,7 +176,7 @@ export default function FillForm() {
 
     setPhase(session.phase as Phase)
     setFields(session.fields as FormField[])
-    setAnswers((session.answers as AnswerCard[]).map((answer) => ({ ...answer, copied: false })))
+    setAnswers(session.answers.map((answer) => ({ ...answer, copied: false })))
     setFieldCount(session.fieldCount)
     setFrameId(session.frameId ?? null)
     setIncludedFlaggedFieldIds(session.includedFlaggedFieldIds || [])
@@ -338,7 +336,7 @@ export default function FillForm() {
       ])
       const personaTextRaw = await getStorage("persona_text")
       const personaText = typeof personaTextRaw === "string" ? personaTextRaw.trim() : ""
-      const resumeJson = activeJobContext?.tailored_resume_json || baseResumeJson
+      const resumeJson: ResumeJson | null = activeJobContext?.tailored_resume_json || baseResumeJson
       if (!resumeJson) {
         setError("No resume found. Go to Settings and add your base resume first.")
         shouldClearLoading = true
@@ -389,12 +387,12 @@ export default function FillForm() {
           resume_json: resumeJson,
           persona_text: personaText || undefined,
           job_description: activeJobContext?.job_description || undefined,
-          structured_job_description: activeJobContext?.structured_job_description as any || undefined,
+          structured_job_description: activeJobContext?.structured_job_description || undefined,
         })
         debug("FillForm", "fill-form response:", result)
 
         collectedAnswers.push(
-          ...result.answers.map((a: any) => ({
+          ...result.answers.map((a) => ({
             field_id: a.field_id || "",
             label: a.label || "",
             answer: a.answer || "",
@@ -504,7 +502,7 @@ export default function FillForm() {
         title: activeContext.job_title || "Unknown Position",
         url: activeContext.job_url || undefined,
         job_description: activeContext.job_description,
-        structured_job_description: activeContext.structured_job_description as any || undefined,
+        structured_job_description: activeContext.structured_job_description || undefined,
         tailored_resume_json: activeContext.tailored_resume_json,
         qa_pairs: qaPairs
       })

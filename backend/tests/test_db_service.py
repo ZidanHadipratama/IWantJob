@@ -2,6 +2,8 @@
 
 Uses unittest.mock to avoid real DB connections.
 """
+import base64
+import json
 from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import HTTPException
@@ -22,6 +24,12 @@ def _make_request(headers: dict) -> Request:
         "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
     }
     return Request(scope)
+
+
+def _make_supabase_key(role: str) -> str:
+    header = base64.urlsafe_b64encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode()).decode().rstrip("=")
+    payload = base64.urlsafe_b64encode(json.dumps({"role": role}).encode()).decode().rstrip("=")
+    return f"{header}.{payload}.signature"
 
 
 class TestGetSupabaseClient:
@@ -49,15 +57,31 @@ class TestGetSupabaseClient:
         request = _make_request(
             {
                 "X-Supabase-Url": "https://example.supabase.co",
-                "X-Supabase-Key": "some-anon-key",
+                "X-Supabase-Key": _make_supabase_key("service_role"),
             }
         )
         with patch("app.dependencies.create_client") as mock_create:
             mock_client = MagicMock()
             mock_create.return_value = mock_client
             result = get_supabase_client(request)
-        mock_create.assert_called_once_with("https://example.supabase.co", "some-anon-key")
+        mock_create.assert_called_once_with(
+            "https://example.supabase.co", _make_supabase_key("service_role")
+        )
         assert result is mock_client
+
+    def test_raises_400_when_key_is_not_service_role(self):
+        from app.dependencies import get_supabase_client
+
+        request = _make_request(
+            {
+                "X-Supabase-Url": "https://example.supabase.co",
+                "X-Supabase-Key": _make_supabase_key("anon"),
+            }
+        )
+        with pytest.raises(HTTPException) as exc_info:
+            get_supabase_client(request)
+        assert exc_info.value.status_code == 400
+        assert "service role key" in exc_info.value.detail.lower()
 
 
 class TestGetUserId:

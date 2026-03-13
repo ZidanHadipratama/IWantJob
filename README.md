@@ -148,7 +148,7 @@ supabase db push
 # Or paste the migration SQL files into the Supabase Dashboard SQL editor
 ```
 
-Collect your **project URL** and **anon key** — you'll need them in the extension settings.
+Collect your **project URL** and **service_role key** — you'll need them in the extension settings for the current pre-auth runtime mode.
 
 ### 3. Start the backend
 
@@ -201,7 +201,7 @@ In Chrome:
 Open the extension options page and set:
 
 - **Backend URL** — `http://localhost:8000`
-- **Supabase URL** + **key**
+- **Supabase URL** + **service role key**
 - **AI provider**, **model**, and **API key**
 - **Base resume** (paste your resume text)
 - **Persona** (optional — adds context beyond your resume for better answers)

@@ -12,28 +12,15 @@ import {
 } from "~lib/storage"
 import { debug, debugError } from "~lib/debug"
 import { sendToContentScript } from "~lib/messaging"
-import type { ExtractJDResponse } from "~lib/types"
+import type {
+  ExtractJDResponse,
+  ResumeContact,
+  ResumeJson,
+  ResumeSkills,
+  StructuredJobDescription
+} from "~lib/types"
 
 type Phase = "idle" | "extracted" | "tailored"
-
-interface ResumeContact {
-  name?: string; email?: string; phone?: string; location?: string
-  linkedin?: string; github?: string; website?: string; work_authorization?: string
-}
-interface ResumeSkills {
-  languages?: string[]; frameworks?: string[]; tools?: string[]; other?: string[]
-}
-interface ResumeSectionEntry {
-  heading: string; subheading?: string; dates?: string
-  location?: string; url?: string; bullets: string[]
-}
-interface ResumeSection {
-  title: string; entries: ResumeSectionEntry[]
-}
-interface ResumeJSON {
-  contact: ResumeContact; summary?: string
-  skills?: ResumeSkills; sections: ResumeSection[]
-}
 
 export default function Resume() {
   const [phase, setPhase] = useState<Phase>("idle")
@@ -42,14 +29,14 @@ export default function Resume() {
   const [error, setError] = useState("")
   const [jobId, setJobId] = useState<string | null>(null)
   const [jdText, setJdText] = useState("")
-  const [structuredJobDescription, setStructuredJobDescription] = useState<object | null>(null)
+  const [structuredJobDescription, setStructuredJobDescription] = useState<StructuredJobDescription | null>(null)
   const [company, setCompany] = useState("")
   const [jobTitle, setJobTitle] = useState("")
   const [jobUrl, setJobUrl] = useState("")
   const [pageTitle, setPageTitle] = useState("")
   const [pageExcerpt, setPageExcerpt] = useState("")
   const [metadataLines, setMetadataLines] = useState<string[]>([])
-  const [tailoredJson, setTailoredJson] = useState<ResumeJSON | null>(null)
+  const [tailoredJson, setTailoredJson] = useState<ResumeJson | null>(null)
   const [matchScore, setMatchScore] = useState(0)
   const [copied, setCopied] = useState(false)
   const [persistenceState, setPersistenceState] = useState<"draft" | "saved">("draft")
@@ -65,14 +52,14 @@ export default function Resume() {
     setPhase(session.phase as Phase)
     setJobId(session.jobId || null)
     setJdText(session.jdText)
-    setStructuredJobDescription((session.structuredJobDescription as object | null) || null)
+    setStructuredJobDescription(session.structuredJobDescription || null)
     setCompany(session.company)
     setJobTitle(session.jobTitle)
     setJobUrl(session.jobUrl)
     setPageTitle(session.pageTitle || "")
     setPageExcerpt(session.pageExcerpt || "")
     setMetadataLines(Array.isArray(session.metadataLines) ? session.metadataLines : [])
-    setTailoredJson(session.tailoredJson as ResumeJSON | null)
+    setTailoredJson(session.tailoredJson || null)
     setMatchScore(session.matchScore)
     setLoading(session.inFlightRequest?.kind === "tailor_resume")
   }, [])
@@ -96,14 +83,14 @@ export default function Resume() {
           setPhase(context.phase as Phase)
           setJobId(context.job_id || null)
           setJdText(context.job_description)
-          setStructuredJobDescription((context.structured_job_description as object | null) || null)
+          setStructuredJobDescription(context.structured_job_description || null)
           setCompany(context.company)
           setJobTitle(context.job_title)
           setJobUrl(context.job_url)
           setPageTitle(context.page_title || "")
           setPageExcerpt(context.page_excerpt || "")
           setMetadataLines(Array.isArray(context.metadata_lines) ? context.metadata_lines : [])
-          setTailoredJson((context.tailored_resume_json as ResumeJSON | null) || null)
+          setTailoredJson(context.tailored_resume_json || null)
           setLoading(false)
         }
         setPersistenceState(context.persistence_state || "draft")
@@ -161,14 +148,14 @@ export default function Resume() {
     p: Phase,
     id: string | null,
     jd: string,
-    structured: object | null,
+    structured: StructuredJobDescription | null,
     co: string,
     jt: string,
     ju: string,
     pt: string,
     pe: string,
     ml: string[],
-    tj: ResumeJSON | null,
+    tj: ResumeJson | null,
     ms: number,
     inFlightRequest: InFlightRequest | null = null
   ) => {
@@ -329,8 +316,8 @@ export default function Resume() {
         structuredJobDescription: tailorResult.structured_job_description
       })
 
-      const json = tailorResult.tailored_resume_json as ResumeJSON
-      const nextStructuredJobDescription = (tailorResult.structured_job_description as object | null) || null
+      const json = tailorResult.tailored_resume_json
+      const nextStructuredJobDescription = tailorResult.structured_job_description || null
       const resolvedCompany = tailorResult.job_info?.company || companyName
       const resolvedTitle = tailorResult.job_info?.title || title
       const latestSession = normalizeResumeSession(await getStorage("resume_session"))
@@ -398,7 +385,7 @@ export default function Resume() {
     }
   }
 
-  function resumeToText(r: ResumeJSON): string {
+  function resumeToText(r: ResumeJson): string {
     const lines: string[] = []
     const c = r.contact
     if (c.name) lines.push(c.name)
@@ -471,7 +458,7 @@ export default function Resume() {
     }
   }
 
-  function handleResumeChange(nextResume: ResumeJSON) {
+  function handleResumeChange(nextResume: ResumeJson) {
     setPersistenceState("draft")
     setSaveTone("neutral")
     setSaveMessage("")
@@ -675,7 +662,7 @@ function EditableTextarea({ value, onChange, className }: {
   )
 }
 
-function ResumePreview({ resume, onChange }: { resume: ResumeJSON; onChange: (r: ResumeJSON) => void }) {
+function ResumePreview({ resume, onChange }: { resume: ResumeJson; onChange: (r: ResumeJson) => void }) {
   const c = resume.contact
 
   function updateContact(field: keyof ResumeContact, value: string) {

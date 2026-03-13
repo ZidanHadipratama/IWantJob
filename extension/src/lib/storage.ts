@@ -1,4 +1,10 @@
 // Type definitions for chrome.storage.local keys
+import type {
+  AutofillAnswerInput,
+  FormField,
+  ResumeJson,
+  StructuredJobDescription
+} from "./types"
 
 export interface AIModelConfig {
   provider: string // "openai" | "anthropic" | "google" | "deepseek" | "ollama"
@@ -36,14 +42,14 @@ export interface ActiveJobContext {
   persistence_state: "draft" | "saved"
   job_id?: string | null
   job_description: string
-  structured_job_description?: object | null
+  structured_job_description?: StructuredJobDescription | null
   company: string
   job_title: string
   job_url: string
   page_title: string
   page_excerpt: string
   metadata_lines: string[]
-  tailored_resume_json: object | null
+  tailored_resume_json: ResumeJson | null
   draft_qa_pairs: DraftQAPair[]
 }
 
@@ -51,22 +57,22 @@ export interface ResumeSessionState {
   phase: string
   jobId?: string | null
   jdText: string
-  structuredJobDescription?: object | null
+  structuredJobDescription?: StructuredJobDescription | null
   company: string
   jobTitle: string
   jobUrl: string
   pageTitle: string
   pageExcerpt: string
   metadataLines: string[]
-  tailoredJson: object | null
+  tailoredJson: ResumeJson | null
   matchScore: number
   inFlightRequest?: InFlightRequest | null
 }
 
 export interface FillFormSessionState {
   phase: string
-  fields: object[]
-  answers: object[]
+  fields: FormField[]
+  answers: AutofillAnswerInput[]
   fieldCount: number
   frameId?: number | null
   includedFlaggedFieldIds?: string[]
@@ -80,7 +86,7 @@ export interface StorageSchema {
   user_id: string
   persona_text: string
   base_resume_text: string
-  base_resume_json: object | null
+  base_resume_json: ResumeJson | null
   debug_log: string[]
   // Session state — persists across tab switches
   resume_session: ResumeSessionState | null
@@ -97,8 +103,22 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []
 }
 
-function asObjectArray(value: unknown): object[] {
-  return Array.isArray(value) ? value.filter((item): item is object => Boolean(item) && typeof item === "object") : []
+function asFormFieldArray(value: unknown): FormField[] {
+  return Array.isArray(value) ? value.filter((item): item is FormField => Boolean(item) && typeof item === "object") : []
+}
+
+function asAutofillAnswerArray(value: unknown): AutofillAnswerInput[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is AutofillAnswerInput => Boolean(item) && typeof item === "object")
+    : []
+}
+
+function asResumeJson(value: unknown): ResumeJson | null {
+  return value && typeof value === "object" ? (value as ResumeJson) : null
+}
+
+function asStructuredJobDescription(value: unknown): StructuredJobDescription | null {
+  return value && typeof value === "object" ? (value as StructuredJobDescription) : null
 }
 
 function asInFlightRequest(value: unknown): InFlightRequest | null {
@@ -128,17 +148,14 @@ export function normalizeResumeSession(raw: unknown): ResumeSessionState | null 
     phase,
     jobId: typeof session.jobId === "string" ? session.jobId : null,
     jdText,
-    structuredJobDescription:
-      session.structuredJobDescription && typeof session.structuredJobDescription === "object"
-        ? session.structuredJobDescription
-        : null,
+    structuredJobDescription: asStructuredJobDescription(session.structuredJobDescription),
     company: asString(session.company),
     jobTitle: asString(session.jobTitle),
     jobUrl: asString(session.jobUrl),
     pageTitle: asString(session.pageTitle),
     pageExcerpt: asString(session.pageExcerpt),
     metadataLines: asStringArray(session.metadataLines),
-    tailoredJson: session.tailoredJson && typeof session.tailoredJson === "object" ? session.tailoredJson : null,
+    tailoredJson: asResumeJson(session.tailoredJson),
     matchScore: typeof session.matchScore === "number" ? session.matchScore : 0,
     inFlightRequest: asInFlightRequest(session.inFlightRequest)
   }
@@ -151,8 +168,8 @@ export function normalizeFillFormSession(raw: unknown): FillFormSessionState | n
   const phase = session.phase === "answered" ? "answered" : session.phase === "extracted" ? "extracted" : "idle"
   if (phase === "idle") return null
 
-  const fields = asObjectArray(session.fields)
-  const answers = asObjectArray(session.answers)
+  const fields = asFormFieldArray(session.fields)
+  const answers = asAutofillAnswerArray(session.answers)
   const fieldCount = typeof session.fieldCount === "number" ? session.fieldCount : fields.length
 
   if (phase === "extracted" && fields.length === 0) return null
@@ -176,10 +193,7 @@ export function normalizeActiveJobContext(raw: unknown): ActiveJobContext | null
   const jobDescription = asString(context.job_description).trim()
   if (!jobDescription) return null
 
-  const tailoredResume =
-    context.tailored_resume_json && typeof context.tailored_resume_json === "object"
-      ? context.tailored_resume_json
-      : null
+  const tailoredResume = asResumeJson(context.tailored_resume_json)
 
   const phase: ActiveJobContext["phase"] =
     context.phase === "tailored" && tailoredResume ? "tailored" : "extracted"
@@ -203,10 +217,7 @@ export function normalizeActiveJobContext(raw: unknown): ActiveJobContext | null
     persistence_state: persistenceState,
     job_id: jobId,
     job_description: jobDescription,
-    structured_job_description:
-      context.structured_job_description && typeof context.structured_job_description === "object"
-        ? context.structured_job_description
-        : null,
+    structured_job_description: asStructuredJobDescription(context.structured_job_description),
     company: asString(context.company),
     job_title: asString(context.job_title),
     job_url: asString(context.job_url),

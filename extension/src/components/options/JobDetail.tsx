@@ -21,59 +21,11 @@ import {
 } from "lucide-react"
 
 import { createApiClient, type JobDetail as JobDetailRecord, type QAPairItem, type ResumeRecord } from "~lib/api"
+import type { ResumeContact, ResumeJson, ResumeSkills, StructuredJobDescription } from "~lib/types"
 
 interface JobDetailProps {
   jobId: string
   onBack: () => void
-}
-
-interface ResumeContact {
-  name?: string
-  email?: string
-  phone?: string
-  location?: string
-  linkedin?: string
-  github?: string
-  website?: string
-}
-
-interface ResumeSkills {
-  languages?: string[]
-  frameworks?: string[]
-  tools?: string[]
-  other?: string[]
-}
-
-interface ResumeSectionEntry {
-  heading?: string
-  subheading?: string
-  dates?: string
-  location?: string
-  url?: string
-  bullets?: string[]
-}
-
-interface ResumeSection {
-  title: string
-  entries: ResumeSectionEntry[]
-}
-
-interface ResumeJSON {
-  contact: ResumeContact
-  summary?: string
-  skills?: ResumeSkills
-  sections: ResumeSection[]
-}
-
-interface StructuredJobDescription {
-  role_focus?: string | null
-  must_have_skills?: string[]
-  preferred_skills?: string[]
-  responsibilities?: string[]
-  domain_keywords?: string[]
-  seniority?: string | null
-  work_mode?: string | null
-  employment_type?: string | null
 }
 
 const STATUS_OPTIONS = ["saved", "applied", "interviewing", "offer", "rejected", "withdrawn"]
@@ -237,7 +189,7 @@ function formatDate(value?: string | null) {
   return date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
 }
 
-function parseStoredResume(record?: ResumeRecord | null): ResumeJSON | null {
+function parseStoredResume(record?: ResumeRecord | null): ResumeJson | null {
   if (!record) return null
 
   const candidate = (record as ResumeRecord & { resume_json?: unknown }).resume_json ?? record.resume_text
@@ -245,14 +197,14 @@ function parseStoredResume(record?: ResumeRecord | null): ResumeJSON | null {
 
   if (typeof candidate === "string") {
     try {
-      return JSON.parse(candidate) as ResumeJSON
+      return JSON.parse(candidate) as ResumeJson
     } catch {
       return null
     }
   }
 
   if (typeof candidate === "object") {
-    return candidate as ResumeJSON
+    return candidate as ResumeJson
   }
 
   return null
