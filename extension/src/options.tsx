@@ -8,6 +8,7 @@ import { SupabaseConfigCard } from "~components/options/SupabaseConfigCard"
 import { AIConfigCard } from "~components/options/AIConfigCard"
 import { ResumeUploadCard } from "~components/options/ResumeUploadCard"
 import { PersonaCard } from "~components/options/PersonaCard"
+import BrandMark from "~components/BrandMark"
 import JobTracker from "~components/options/JobTracker"
 import JobDetail from "~components/options/JobDetail"
 import { getOrCreateUserId } from "~lib/storage"
@@ -59,12 +60,7 @@ function Options() {
       {/* Top bar */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 flex items-center justify-between h-14">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">IW</span>
-            </div>
-            <h1 className="text-lg font-bold text-text">IWantJob</h1>
-          </div>
+          <BrandMark size="sm" />
           <nav className="flex gap-1">
             {tabs.map((tab) => {
               const Icon = tab.icon
@@ -132,7 +128,7 @@ function Options() {
             </div>
 
             <p className="text-center text-xs text-text-muted mt-8">
-              IWantJob — open source, MIT license. All data stays in your Supabase DB.
+              IWantJob — open source under AGPL. All data stays in your Supabase DB.
             </p>
           </div>
         )}

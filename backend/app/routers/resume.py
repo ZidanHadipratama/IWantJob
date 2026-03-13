@@ -21,12 +21,28 @@ from app.models.schemas import (
     ResumeJSON,
     SaveApplicationDraftRequest,
     SaveApplicationDraftResponse,
+    StructuredJobDescription,
     TailorResumeRequest,
     TailorResumeResponse,
 )
 from app.services.ai_service import AIService
 from app.services.db_service import DBService
 from app.services.job_info_extractor import extract_job_info
+from app.services.prompt_trace import (
+    build_prompt_trace_summary,
+    build_resume_trace_summary,
+    new_trace_id,
+    write_prompt_trace,
+)
+from app.services.prompt_safety import maybe_parse_resume_json, redact_free_text, resume_json_to_prompt_text
+from app.services.resume_relevance import (
+    build_ranked_entry_ordering_brief,
+    build_ranked_resume_alignment_brief,
+)
+from app.services.structured_jd import (
+    extract_structured_jd_heuristics,
+    normalize_structured_jd_with_ai,
+)
 
 router = APIRouter(tags=["resume"])
 
@@ -53,11 +69,31 @@ def _safe_prompt_value(text: Optional[str], fallback: str = "Not provided") -> s
     return cleaned if cleaned else fallback
 
 
-def _format_prompt(body: TailorResumeRequest, resume_text: str) -> str:
+def _format_structured_jd_summary(structured_jd: StructuredJobDescription) -> str:
+    lines = [
+        f"- Role focus: {structured_jd.role_focus or 'Not identified'}",
+        f"- Must-have skills: {', '.join(structured_jd.must_have_skills) if structured_jd.must_have_skills else 'None'}",
+        f"- Preferred skills: {', '.join(structured_jd.preferred_skills) if structured_jd.preferred_skills else 'None'}",
+        f"- Responsibilities: {'; '.join(structured_jd.responsibilities) if structured_jd.responsibilities else 'None'}",
+        f"- Domain keywords: {', '.join(structured_jd.domain_keywords) if structured_jd.domain_keywords else 'None'}",
+        f"- Seniority: {structured_jd.seniority or 'Not identified'}",
+        f"- Work mode: {structured_jd.work_mode or 'Not identified'}",
+        f"- Employment type: {structured_jd.employment_type or 'Not identified'}",
+    ]
+    return "\n".join(lines)
+
+
+def _format_prompt(
+    body: TailorResumeRequest,
+    resume_text: str,
+    structured_jd: StructuredJobDescription,
+    ranked_overlap_brief: str,
+    ranked_entry_ordering_brief: str,
+) -> str:
     prompt_template = _load_prompt("tailor_resume.txt")
     metadata_lines = "\n".join(f"- {line}" for line in body.metadata_lines if line.strip()) or "- None"
     replacements = {
-        "{job_description}": body.job_description,
+        "{job_description}": redact_free_text(body.job_description),
         "{resume}": resume_text,
         "{job_url}": _safe_prompt_value(body.url),
         "{page_title}": _safe_prompt_value(body.page_title),
@@ -65,6 +101,9 @@ def _format_prompt(body: TailorResumeRequest, resume_text: str) -> str:
         "{detected_title}": _safe_prompt_value(body.title),
         "{page_excerpt}": _safe_prompt_value(body.page_excerpt),
         "{metadata_lines}": metadata_lines,
+        "{structured_job_summary}": _format_structured_jd_summary(structured_jd),
+        "{ranked_overlap_brief}": ranked_overlap_brief,
+        "{ranked_entry_ordering_brief}": ranked_entry_ordering_brief,
     }
 
     prompt = prompt_template
@@ -82,60 +121,56 @@ def _clean_company_location(text: Optional[str]) -> Optional[str]:
     return cleaned
 
 
-def _resume_json_to_text(rj: ResumeJSON) -> str:
-    """Format ResumeJSON into readable plain text for AI prompts."""
-    lines = []
-    c = rj.contact
-    if c.name:
-        lines.append(c.name)
-    if c.email:
-        lines.append(c.email)
-    if c.phone:
-        lines.append(c.phone)
-    if c.location:
-        lines.append(c.location)
-    links = [x for x in [c.linkedin, c.github, c.website] if x]
-    if links:
-        lines.append(" | ".join(links))
-    lines.append("")
+def _normalize_entry_key(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    cleaned = re.sub(r"\s+", " ", value).strip().lower()
+    return re.sub(r"[^a-z0-9]+", "", cleaned)
 
-    if rj.summary:
-        lines.append("SUMMARY")
-        lines.append(rj.summary)
-        lines.append("")
 
-    if rj.skills:
-        lines.append("SKILLS")
-        for cat, vals in [
-            ("Languages", rj.skills.languages),
-            ("Frameworks", rj.skills.frameworks),
-            ("Tools", rj.skills.tools),
-            ("Other", rj.skills.other),
-        ]:
-            if vals:
-                lines.append(f"  {cat}: {', '.join(vals)}")
-        lines.append("")
+def _restore_entry_urls(
+    tailored_resume: ResumeJSON,
+    source_resume: Optional[ResumeJSON],
+) -> ResumeJSON:
+    if not source_resume:
+        return tailored_resume
 
-    for section in rj.sections:
-        lines.append(section.title.upper())
+    source_url_map: dict[tuple[str, str], str] = {}
+    fallback_url_map: dict[str, str] = {}
+    for section in source_resume.sections:
+        section_key = _normalize_entry_key(section.title)
         for entry in section.entries:
-            if entry.heading:
-                parts = [entry.heading]
-                if entry.location:
-                    parts.append(entry.location)
-                lines.append(" | ".join(parts))
-            if entry.subheading:
-                parts = [entry.subheading]
-                if entry.dates:
-                    parts.append(entry.dates)
-                lines.append("  " + " | ".join(parts))
-            elif entry.dates:
-                lines.append(f"  {entry.dates}")
-            for b in entry.bullets:
-                lines.append(f"  - {b}")
-            lines.append("")
+            entry_key = _normalize_entry_key(entry.heading)
+            if not entry_key or not entry.url:
+                continue
+            source_url_map[(section_key, entry_key)] = entry.url
+            fallback_url_map.setdefault(entry_key, entry.url)
 
-    return "\n".join(lines)
+    if not source_url_map and not fallback_url_map:
+        return tailored_resume
+
+    updated_sections = []
+    for section in tailored_resume.sections:
+        section_key = _normalize_entry_key(section.title)
+        updated_entries = []
+        for entry in section.entries:
+            if entry.url:
+                updated_entries.append(entry)
+                continue
+            entry_key = _normalize_entry_key(entry.heading)
+            restored_url = source_url_map.get((section_key, entry_key)) or fallback_url_map.get(entry_key)
+            if restored_url:
+                updated_entries.append(entry.model_copy(update={"url": restored_url}))
+            else:
+                updated_entries.append(entry)
+        updated_sections.append(section.model_copy(update={"entries": updated_entries}))
+
+    return tailored_resume.model_copy(update={"sections": updated_sections})
+
+
+def _resume_json_to_text(rj: ResumeJSON) -> str:
+    """Backward-compatible export for non-prompt call sites."""
+    return resume_json_to_prompt_text(rj)
 
 
 def _resolve_job_info(body: TailorResumeRequest, ai_result: dict) -> JobInfo:
@@ -163,6 +198,7 @@ def _persist_tailored_job(
     body: TailorResumeRequest,
     tailored_resume: ResumeJSON,
     job_info: JobInfo,
+    structured_jd: StructuredJobDescription,
 ) -> Optional[str]:
     """Create or update the job row, then save the tailored resume against it."""
     job_payload = {
@@ -175,6 +211,7 @@ def _persist_tailored_job(
         "employment_type": job_info.employment_type,
         "location": job_info.location,
         "salary_range": job_info.salary_range,
+        "structured_job_description": structured_jd.model_dump(),
     }
 
     if body.job_id:
@@ -276,21 +313,81 @@ async def tailor_resume(
     user_id: str = Depends(get_user_id),
 ):
     """Generate a tailored resume from a job description + base resume."""
-    # Resolve resume text
+    trace_id = new_trace_id()
+    source_resume_json = body.resume_json
     resume_text = body.resume_text
-    if body.resume_json:
-        resume_text = _resume_json_to_text(body.resume_json)
+    if source_resume_json:
+        resume_text = resume_json_to_prompt_text(source_resume_json)
     if not resume_text:
         # Try loading from users table
         db = DBService(client, user_id)
         user = db.get_user()
         if user and user.get("base_resume_text"):
-            resume_text = user["base_resume_text"]
+            source_resume_json = maybe_parse_resume_json(user["base_resume_text"])
+            resume_text = (
+                resume_json_to_prompt_text(source_resume_json)
+                if source_resume_json
+                else redact_free_text(user["base_resume_text"])
+            )
     if not resume_text:
         raise HTTPException(status_code=400, detail="No resume provided or found in DB")
 
     ai = AIService(ai_config)
-    prompt = _format_prompt(body, resume_text)
+    write_prompt_trace(
+        trace_id,
+        "incoming_context",
+        {
+            "job_url": body.url,
+            "page_title": body.page_title,
+            "detected_company": body.company,
+            "detected_title": body.title,
+            "page_excerpt": _safe_prompt_value(body.page_excerpt),
+            "metadata_lines": body.metadata_lines,
+            "job_description_preview": redact_free_text(body.job_description),
+        },
+    )
+
+    heuristic_jd = extract_structured_jd_heuristics(body.job_description)
+    write_prompt_trace(trace_id, "structured_jd_heuristic", heuristic_jd.model_dump())
+
+    try:
+        structured_jd = await normalize_structured_jd_with_ai(body.job_description, heuristic_jd, ai)
+    except Exception:
+        structured_jd = heuristic_jd
+    write_prompt_trace(trace_id, "structured_jd_final", structured_jd.model_dump())
+
+    write_prompt_trace(trace_id, "sanitized_resume_fact_pack", build_resume_trace_summary(resume_text))
+    ranked_overlap_brief = build_ranked_resume_alignment_brief(
+        structured_jd,
+        source_resume_json,
+        fallback_resume_text=resume_text,
+    )
+    ranked_entry_ordering_brief = build_ranked_entry_ordering_brief(
+        structured_jd,
+        source_resume_json,
+    )
+    write_prompt_trace(
+        trace_id,
+        "ranked_overlap_brief",
+        {
+            "preview": ranked_overlap_brief,
+        },
+    )
+    write_prompt_trace(
+        trace_id,
+        "ranked_entry_ordering_brief",
+        {
+            "preview": ranked_entry_ordering_brief,
+        },
+    )
+    prompt = _format_prompt(
+        body,
+        resume_text,
+        structured_jd,
+        ranked_overlap_brief,
+        ranked_entry_ordering_brief,
+    )
+    write_prompt_trace(trace_id, "final_prompt_summary", build_prompt_trace_summary(prompt))
 
     try:
         result = await ai.json_completion(
@@ -313,18 +410,41 @@ async def tailor_resume(
             detail=f"AI returned invalid resume JSON: {exc}",
         ) from exc
 
+    output_sections = [section.title for section in tailored_resume.sections[:6]]
+    output_projects: list[str] = []
+    for section in tailored_resume.sections:
+        if section.title.lower() == "projects":
+            output_projects = [entry.heading for entry in section.entries[:5] if entry.heading]
+            break
+    write_prompt_trace(
+        trace_id,
+        "ai_output_summary",
+        {
+            "job_info": job_info.model_dump(),
+            "match_score": match_score,
+            "summary": tailored_resume.summary,
+            "section_titles": output_sections,
+            "project_headings": output_projects,
+        },
+    )
+
+    if source_resume_json:
+        tailored_resume = tailored_resume.model_copy(update={"contact": source_resume_json.contact})
+        tailored_resume = _restore_entry_urls(tailored_resume, source_resume_json)
+
     # Persist job + tailored resume when requested
     job_id = None
     db = DBService(client, user_id)
     if body.job_id or body.persist_job:
         try:
-            job_id = _persist_tailored_job(db, user_id, body, tailored_resume, job_info)
+            job_id = _persist_tailored_job(db, user_id, body, tailored_resume, job_info, structured_jd)
         except Exception as exc:
             logger.warning("Job persistence failed after tailoring: %s", exc)
 
     return TailorResumeResponse(
         tailored_resume_json=tailored_resume,
         job_info=job_info,
+        structured_job_description=structured_jd,
         match_score=match_score,
         job_id=job_id,
     )
@@ -351,6 +471,7 @@ async def save_application_draft(
         employment_type=body.employment_type,
         location=body.location,
         salary_range=body.salary_range,
+        structured_job_description=body.structured_job_description,
         notes=body.notes,
     )
     sanitized = _sanitize_log_job_payload(job_request)

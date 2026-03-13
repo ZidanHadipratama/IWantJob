@@ -1,20 +1,31 @@
-"""Integration tests for POST /upload-resume and POST /save-resume-text endpoints."""
-import io
-from unittest.mock import MagicMock, patch
+"""Integration tests for resume parse/save endpoints."""
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from fastapi import HTTPException
 
-from app.main import app
+from app.models.schemas import ParseResumeRequest
+from app.routers.resume import parse_resume, save_resume_text
 
 
 BASE_HEADERS = {
     "X-Supabase-Url": "https://example.supabase.co",
     "X-Supabase-Key": "anon-key-123",
     "X-User-Id": "550e8400-e29b-41d4-a716-446655440000",
+    "X-AI-Provider": "openai",
+    "X-AI-Key": "sk-test",
+    "X-AI-Model": "gpt-4o-mini",
 }
 
 SAMPLE_RESUME_TEXT = "John Doe\nSoftware Engineer\nExperience: 5 years Python"
+SAMPLE_RESUME_JSON = {
+    "contact": {
+        "name": "John Doe",
+        "email": "john@example.com",
+    },
+    "summary": "Software engineer with backend experience.",
+    "sections": [],
+}
 
 
 def make_mock_db():
@@ -33,131 +44,91 @@ def make_mock_db():
     }
     return db
 
-
-def make_mock_converter(text: str = SAMPLE_RESUME_TEXT):
-    """Return a mock PdfConverter that returns rendered markdown."""
-    mock_rendered = MagicMock()
-    mock_rendered.markdown = text
-    mock_converter = MagicMock(return_value=mock_rendered)
-    return mock_converter
-
-
-# ── Test 1: PDF upload happy path ───────────────────────────────────────────
-
-
 @pytest.mark.asyncio
-async def test_upload_resume_pdf_extracts_text_and_saves():
+async def test_parse_resume_returns_structured_json_and_saves():
     mock_db = make_mock_db()
-    mock_rendered = MagicMock()
-    mock_rendered.markdown = SAMPLE_RESUME_TEXT
-    mock_converter_instance = MagicMock(return_value=mock_rendered)
-    mock_converter_class = MagicMock(return_value=mock_converter_instance)
+    mock_ai = MagicMock()
+    mock_ai.json_completion = AsyncMock(return_value=SAMPLE_RESUME_JSON)
 
-    transport = ASGITransport(app=app)
-    with patch("app.routers.resume.DBService", return_value=mock_db), \
-         patch("app.dependencies.create_client", return_value=MagicMock()), \
-         patch("app.routers.resume.PdfConverter", mock_converter_class), \
-         patch("app.routers.resume.create_model_dict", return_value={}):
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.post(
-                "/upload-resume",
-                files={"file": ("resume.pdf", io.BytesIO(b"%PDF-1.4 fake content"), "application/pdf")},
-                headers=BASE_HEADERS,
-            )
+    with patch("app.routers.resume.DBService", return_value=mock_db), patch(
+        "app.routers.resume.AIService", return_value=mock_ai
+    ):
+        response = await parse_resume(
+            body=ParseResumeRequest(resume_text=SAMPLE_RESUME_TEXT),
+            ai_config=MagicMock(provider="openai", model="gpt-4o-mini"),
+            client=MagicMock(),
+            user_id="550e8400-e29b-41d4-a716-446655440000",
+    )
 
-    assert response.status_code == 200
-    body = response.json()
-    assert "resume_text" in body
-    assert body["resume_text"] == SAMPLE_RESUME_TEXT
+    body = response
+    assert body["resume_json"]["contact"]["name"] == "John Doe"
+    assert body["resume_json"]["contact"]["email"] == "john@example.com"
+    assert body["resume_json"]["summary"] == SAMPLE_RESUME_JSON["summary"]
+    assert body["resume_json"]["sections"] == []
     assert "message" in body
-    mock_db.save_base_resume.assert_called_once()
+    mock_ai.json_completion.assert_awaited_once()
     mock_db.upsert_user.assert_called_once()
 
 
-# ── Test 2: Non-PDF file returns 400 ───────────────────────────────────────
-
-
 @pytest.mark.asyncio
-async def test_upload_resume_non_pdf_returns_400():
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post(
-            "/upload-resume",
-            files={"file": ("resume.docx", io.BytesIO(b"fake word content"), "application/msword")},
-            headers=BASE_HEADERS,
+async def test_parse_resume_empty_returns_400():
+    with pytest.raises(HTTPException) as exc_info:
+        await parse_resume(
+            body=ParseResumeRequest(resume_text="   "),
+            ai_config=MagicMock(provider="openai", model="gpt-4o-mini"),
+            client=MagicMock(),
+            user_id="550e8400-e29b-41d4-a716-446655440000",
         )
 
-    assert response.status_code == 400
-    assert "pdf" in response.json()["detail"].lower()
-
-
-# ── Test 3: Corrupt/unreadable PDF returns 400 ─────────────────────────────
+    assert exc_info.value.status_code == 400
+    assert "empty" in exc_info.value.detail.lower()
 
 
 @pytest.mark.asyncio
-async def test_upload_resume_corrupt_pdf_returns_400():
+async def test_parse_resume_invalid_ai_payload_returns_422():
     mock_db = make_mock_db()
-    mock_converter_instance = MagicMock(side_effect=Exception("PDF parse error"))
-    mock_converter_class = MagicMock(return_value=mock_converter_instance)
+    mock_ai = MagicMock()
+    mock_ai.json_completion = AsyncMock(return_value={"contact": "invalid", "sections": []})
 
-    transport = ASGITransport(app=app)
-    with patch("app.routers.resume.DBService", return_value=mock_db), \
-         patch("app.dependencies.create_client", return_value=MagicMock()), \
-         patch("app.routers.resume.PdfConverter", mock_converter_class), \
-         patch("app.routers.resume.create_model_dict", return_value={}):
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.post(
-                "/upload-resume",
-                files={"file": ("resume.pdf", io.BytesIO(b"not a real pdf"), "application/pdf")},
-                headers=BASE_HEADERS,
+    with patch("app.routers.resume.DBService", return_value=mock_db), patch(
+        "app.routers.resume.AIService", return_value=mock_ai
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await parse_resume(
+                body=ParseResumeRequest(resume_text=SAMPLE_RESUME_TEXT),
+                ai_config=MagicMock(provider="openai", model="gpt-4o-mini"),
+                client=MagicMock(),
+                user_id="550e8400-e29b-41d4-a716-446655440000",
             )
 
-    assert response.status_code == 400
-    detail = response.json()["detail"].lower()
-    assert "extract" in detail or "parse" in detail or "pdf" in detail
-
-
-# ── Test 4: POST /save-resume-text saves plain text ────────────────────────
+    assert exc_info.value.status_code == 422
+    assert "invalid resume json" in exc_info.value.detail.lower()
 
 
 @pytest.mark.asyncio
 async def test_save_resume_text_saves_plain_text():
     mock_db = make_mock_db()
-    transport = ASGITransport(app=app)
-    with patch("app.routers.resume.DBService", return_value=mock_db), patch(
-        "app.dependencies.create_client", return_value=MagicMock()
-    ):
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.post(
-                "/save-resume-text",
-                json={"resume_text": SAMPLE_RESUME_TEXT},
-                headers=BASE_HEADERS,
-            )
+    with patch("app.routers.resume.DBService", return_value=mock_db):
+        body = await save_resume_text(
+            body=MagicMock(resume_text=SAMPLE_RESUME_TEXT),
+            client=MagicMock(),
+            user_id="550e8400-e29b-41d4-a716-446655440000",
+        )
 
-    assert response.status_code == 200
-    body = response.json()
     assert body["resume_text"] == SAMPLE_RESUME_TEXT
     assert "message" in body
     mock_db.save_base_resume.assert_called_once_with(SAMPLE_RESUME_TEXT)
     mock_db.upsert_user.assert_called_once()
 
 
-# ── Test 5: POST /save-resume-text with empty text returns 400 ─────────────
-
-
 @pytest.mark.asyncio
 async def test_save_resume_text_empty_returns_400():
-    mock_db = make_mock_db()
-    transport = ASGITransport(app=app)
-    with patch("app.routers.resume.DBService", return_value=mock_db), patch(
-        "app.dependencies.create_client", return_value=MagicMock()
-    ):
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.post(
-                "/save-resume-text",
-                json={"resume_text": "   "},
-                headers=BASE_HEADERS,
-            )
+    with pytest.raises(HTTPException) as exc_info:
+        await save_resume_text(
+            body=MagicMock(resume_text="   "),
+            client=MagicMock(),
+            user_id="550e8400-e29b-41d4-a716-446655440000",
+        )
 
-    assert response.status_code == 400
-    assert "empty" in response.json()["detail"].lower()
+    assert exc_info.value.status_code == 400
+    assert "empty" in exc_info.value.detail.lower()

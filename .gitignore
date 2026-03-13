@@ -17,6 +17,7 @@ __pycache__/
 backend/__pycache__/
 backend/models/
 backend/iwantjob.log
+backend/logs/
 
 # Extension build artifacts
 node_modules/
@@ -30,6 +31,7 @@ extension/playwright-report/
 extension/test-results/
 playwright-report/
 test-results/
+resume.tex
 
 # Supabase CLI local state
 supabase/.temp/

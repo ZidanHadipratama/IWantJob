@@ -10,6 +10,9 @@ interface ResumeUploadCardProps {
 interface SectionEntry {
   heading: string
   subheading: string
+  dates?: string
+  location?: string
+  url?: string
   bullets: string[]
 }
 
@@ -69,6 +72,9 @@ function toEditable(raw: any): ParsedResume {
         entries: (s.entries || []).map((e: any) => ({
           heading: e.heading || "",
           subheading: e.subheading || "",
+          dates: e.dates || "",
+          location: e.location || "",
+          url: e.url || "",
           bullets: e.bullets || [],
         })),
       })
@@ -84,6 +90,9 @@ function toEditable(raw: any): ParsedResume {
           heading: `${e.title || ""} at ${e.company || ""}`.trim(),
           subheading: [e.start_date, e.end_date || "Present"].filter(Boolean).join(" - ") +
             (e.location ? ` | ${e.location}` : ""),
+          dates: [e.start_date, e.end_date || "Present"].filter(Boolean).join(" - "),
+          location: e.location || "",
+          url: e.url || "",
           bullets: e.bullets || [],
         })),
       })
@@ -95,6 +104,8 @@ function toEditable(raw: any): ParsedResume {
           heading: `${e.degree || ""} - ${e.school || ""}`.trim(),
           subheading: [e.start_date, e.end_date].filter(Boolean).join(" - ") +
             (e.gpa ? ` | GPA: ${e.gpa}` : ""),
+          dates: [e.start_date, e.end_date].filter(Boolean).join(" - "),
+          url: e.url || "",
           bullets: [],
         })),
       })
@@ -105,6 +116,7 @@ function toEditable(raw: any): ParsedResume {
         entries: raw.projects.map((p: any) => ({
           heading: p.name || "",
           subheading: p.technologies?.join(", ") || "",
+          url: p.url || "",
           bullets: p.bullets || [],
         })),
       })
@@ -235,7 +247,7 @@ function SectionEditor({ section, onUpdate, onRemove }: {
   function addEntry() {
     onUpdate({
       ...section,
-      entries: [...section.entries, { heading: "", subheading: "", bullets: [] }]
+      entries: [...section.entries, { heading: "", subheading: "", dates: "", location: "", url: "", bullets: [] }]
     })
   }
 
@@ -293,6 +305,38 @@ function SectionEditor({ section, onUpdate, onRemove }: {
                       className="input-field text-sm py-1"
                     />
                   </div>
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                    <div>
+                      <label className="text-xs text-text-muted">Dates</label>
+                      <input
+                        type="text"
+                        value={entry.dates || ""}
+                        onChange={e => updateEntry(idx, { ...entry, dates: e.target.value })}
+                        placeholder="e.g. Jan 2024 - Present"
+                        className="input-field text-sm py-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-text-muted">Location</label>
+                      <input
+                        type="text"
+                        value={entry.location || ""}
+                        onChange={e => updateEntry(idx, { ...entry, location: e.target.value })}
+                        placeholder="e.g. Remote"
+                        className="input-field text-sm py-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-text-muted">Link URL</label>
+                      <input
+                        type="text"
+                        value={entry.url || ""}
+                        onChange={e => updateEntry(idx, { ...entry, url: e.target.value })}
+                        placeholder="https://github.com/..."
+                        className="input-field text-sm py-1"
+                      />
+                    </div>
+                  </div>
                   <div>
                     <label className="text-xs text-text-muted">Bullets (one per line)</label>
                     <textarea
@@ -336,7 +380,9 @@ export function ResumeUploadCard({ onConfigChange }: ResumeUploadCardProps) {
   const [error, setError] = useState("")
   const [editData, setEditData] = useState<ParsedResume | null>(null)
   const [savedIndicator, setSavedIndicator] = useState(false)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const textDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const editDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const didHydrateRef = useRef(false)
 
   const onConfigChangeRef = useRef(onConfigChange)
   onConfigChangeRef.current = onConfigChange
@@ -359,13 +405,39 @@ export function ResumeUploadCard({ onConfigChange }: ResumeUploadCardProps) {
 
   const saveTextLocally = useCallback(
     (text: string) => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-      debounceRef.current = setTimeout(async () => {
+      if (textDebounceRef.current) clearTimeout(textDebounceRef.current)
+      textDebounceRef.current = setTimeout(async () => {
         await setStorage("base_resume_text", text)
       }, 500)
     },
     []
   )
+
+  useEffect(() => {
+    if (!didHydrateRef.current) {
+      didHydrateRef.current = true
+      return
+    }
+
+    if (!editData) return
+
+    if (editDebounceRef.current) clearTimeout(editDebounceRef.current)
+    editDebounceRef.current = setTimeout(async () => {
+      await setStorage("base_resume_json", editData)
+      onConfigChangeRef.current?.(true)
+    }, 500)
+
+    return () => {
+      if (editDebounceRef.current) clearTimeout(editDebounceRef.current)
+    }
+  }, [editData])
+
+  useEffect(() => {
+    return () => {
+      if (textDebounceRef.current) clearTimeout(textDebounceRef.current)
+      if (editDebounceRef.current) clearTimeout(editDebounceRef.current)
+    }
+  }, [])
 
   function handleTextChange(value: string) {
     setResumeText(value)
@@ -443,7 +515,7 @@ export function ResumeUploadCard({ onConfigChange }: ResumeUploadCardProps) {
       ...editData,
       sections: [...editData.sections, {
         title: "New Section",
-        entries: [{ heading: "", subheading: "", bullets: [] }]
+        entries: [{ heading: "", subheading: "", dates: "", location: "", url: "", bullets: [] }]
       }]
     })
   }

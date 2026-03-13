@@ -42,6 +42,7 @@ export default function Resume() {
   const [error, setError] = useState("")
   const [jobId, setJobId] = useState<string | null>(null)
   const [jdText, setJdText] = useState("")
+  const [structuredJobDescription, setStructuredJobDescription] = useState<object | null>(null)
   const [company, setCompany] = useState("")
   const [jobTitle, setJobTitle] = useState("")
   const [jobUrl, setJobUrl] = useState("")
@@ -64,6 +65,7 @@ export default function Resume() {
     setPhase(session.phase as Phase)
     setJobId(session.jobId || null)
     setJdText(session.jdText)
+    setStructuredJobDescription((session.structuredJobDescription as object | null) || null)
     setCompany(session.company)
     setJobTitle(session.jobTitle)
     setJobUrl(session.jobUrl)
@@ -94,6 +96,7 @@ export default function Resume() {
           setPhase(context.phase as Phase)
           setJobId(context.job_id || null)
           setJdText(context.job_description)
+          setStructuredJobDescription((context.structured_job_description as object | null) || null)
           setCompany(context.company)
           setJobTitle(context.job_title)
           setJobUrl(context.job_url)
@@ -158,6 +161,7 @@ export default function Resume() {
     p: Phase,
     id: string | null,
     jd: string,
+    structured: object | null,
     co: string,
     jt: string,
     ju: string,
@@ -169,7 +173,7 @@ export default function Resume() {
     inFlightRequest: InFlightRequest | null = null
   ) => {
     return setStorage("resume_session", {
-      phase: p, jobId: id, jdText: jd, company: co, jobTitle: jt, jobUrl: ju,
+      phase: p, jobId: id, jdText: jd, structuredJobDescription: structured, company: co, jobTitle: jt, jobUrl: ju,
       pageTitle: pt, pageExcerpt: pe, metadataLines: ml,
       tailoredJson: tj, matchScore: ms, inFlightRequest
     })
@@ -208,6 +212,7 @@ export default function Resume() {
       persistence_state: persistenceState,
       job_id: jobId,
       job_description: jdText,
+      structured_job_description: structuredJobDescription,
       company,
       job_title: jobTitle,
       job_url: jobUrl,
@@ -216,7 +221,7 @@ export default function Resume() {
       metadata_lines: metadataLines,
       tailored_resume_json: tailoredJson
     })
-  }, [phase, persistenceState, jobId, jdText, company, jobTitle, jobUrl, pageTitle, pageExcerpt, metadataLines, tailoredJson, syncActiveJobContext])
+  }, [phase, persistenceState, jobId, jdText, structuredJobDescription, company, jobTitle, jobUrl, pageTitle, pageExcerpt, metadataLines, tailoredJson, syncActiveJobContext])
 
   async function handleExtractJD() {
     setLoading(true)
@@ -240,6 +245,7 @@ export default function Resume() {
       setJobId(null)
       setCompany(result.company || "")
       setJobTitle(result.job_title || "")
+      setStructuredJobDescription(null)
       setPageTitle(result.page_title || "")
       setPageExcerpt(result.readability_excerpt || "")
       setMetadataLines(result.metadata_lines || [])
@@ -253,6 +259,7 @@ export default function Resume() {
         "extracted",
         null,
         result.text,
+        null,
         result.company || "",
         result.job_title || "",
         result.url,
@@ -286,6 +293,7 @@ export default function Resume() {
         "extracted",
         jobId,
         jdText,
+        structuredJobDescription,
         company,
         jobTitle,
         jobUrl,
@@ -317,9 +325,12 @@ export default function Resume() {
         matchScore: tailorResult.match_score,
         jobId: tailorResult.job_id,
         jobInfo: tailorResult.job_info
+        ,
+        structuredJobDescription: tailorResult.structured_job_description
       })
 
       const json = tailorResult.tailored_resume_json as ResumeJSON
+      const nextStructuredJobDescription = (tailorResult.structured_job_description as object | null) || null
       const resolvedCompany = tailorResult.job_info?.company || companyName
       const resolvedTitle = tailorResult.job_info?.title || title
       const latestSession = normalizeResumeSession(await getStorage("resume_session"))
@@ -333,6 +344,7 @@ export default function Resume() {
       ])
       const resolvedJobId = null
       setJobId(resolvedJobId)
+      setStructuredJobDescription(nextStructuredJobDescription)
       setCompany(resolvedCompany)
       setJobTitle(resolvedTitle)
       setTailoredJson(json)
@@ -345,6 +357,7 @@ export default function Resume() {
         "tailored",
         resolvedJobId,
         jdText,
+        nextStructuredJobDescription,
         resolvedCompany,
         resolvedTitle,
         jobUrl,
@@ -364,6 +377,7 @@ export default function Resume() {
           "extracted",
           jobId,
           jdText,
+          structuredJobDescription,
           company,
           jobTitle,
           jobUrl,
@@ -787,6 +801,14 @@ function ResumePreview({ resume, onChange }: { resume: ResumeJSON; onChange: (r:
                     className="w-[110px] flex-none text-xs text-text-muted text-right" placeholder="Location" />
                 )}
               </div>
+              {entry.url != null && entry.url !== "" && (
+                <EditableText
+                  value={entry.url}
+                  onChange={v => updateEntry(i, j, "url", v)}
+                  className="mt-0.5 text-[11px] text-primary underline-offset-2 hover:underline"
+                  placeholder="Project link"
+                />
+              )}
               {entry.bullets.map((b, k) => (
                 <div key={k} className="flex items-start gap-1 group ml-2">
                   <span className="text-xs text-text-secondary mt-0.5">•</span>

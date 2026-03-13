@@ -38,6 +38,11 @@ def _sanitize_log_job_payload(body: LogJobRequest) -> dict:
     employment_type = body.employment_type
     location = _strip_html(body.location)
     salary_range = _strip_html(body.salary_range)
+    structured_job_description = (
+        body.structured_job_description.model_dump()
+        if body.structured_job_description is not None
+        else None
+    )
 
     if sanitized_jd and not all([job_type, employment_type, location, salary_range]):
         extracted = extract_job_info(sanitized_jd)
@@ -60,6 +65,7 @@ def _sanitize_log_job_payload(body: LogJobRequest) -> dict:
         "employment_type": employment_type,
         "location": location,
         "salary_range": salary_range,
+        "structured_job_description": structured_job_description,
         "notes": _strip_html(body.notes),
     }
 
@@ -75,6 +81,7 @@ def _sanitize_log_job_payload(body: LogJobRequest) -> dict:
         "employment_type",
         "location",
         "salary_range",
+        "structured_job_description",
         "notes",
     ):
         if field in body.model_fields_set:

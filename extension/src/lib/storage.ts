@@ -36,6 +36,7 @@ export interface ActiveJobContext {
   persistence_state: "draft" | "saved"
   job_id?: string | null
   job_description: string
+  structured_job_description?: object | null
   company: string
   job_title: string
   job_url: string
@@ -50,6 +51,7 @@ export interface ResumeSessionState {
   phase: string
   jobId?: string | null
   jdText: string
+  structuredJobDescription?: object | null
   company: string
   jobTitle: string
   jobUrl: string
@@ -126,6 +128,10 @@ export function normalizeResumeSession(raw: unknown): ResumeSessionState | null 
     phase,
     jobId: typeof session.jobId === "string" ? session.jobId : null,
     jdText,
+    structuredJobDescription:
+      session.structuredJobDescription && typeof session.structuredJobDescription === "object"
+        ? session.structuredJobDescription
+        : null,
     company: asString(session.company),
     jobTitle: asString(session.jobTitle),
     jobUrl: asString(session.jobUrl),
@@ -197,6 +203,10 @@ export function normalizeActiveJobContext(raw: unknown): ActiveJobContext | null
     persistence_state: persistenceState,
     job_id: jobId,
     job_description: jobDescription,
+    structured_job_description:
+      context.structured_job_description && typeof context.structured_job_description === "object"
+        ? context.structured_job_description
+        : null,
     company: asString(context.company),
     job_title: asString(context.job_title),
     job_url: asString(context.job_url),

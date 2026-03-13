@@ -49,6 +49,7 @@ interface ResumeSectionEntry {
   subheading?: string
   dates?: string
   location?: string
+  url?: string
   bullets?: string[]
 }
 
@@ -62,6 +63,17 @@ interface ResumeJSON {
   summary?: string
   skills?: ResumeSkills
   sections: ResumeSection[]
+}
+
+interface StructuredJobDescription {
+  role_focus?: string | null
+  must_have_skills?: string[]
+  preferred_skills?: string[]
+  responsibilities?: string[]
+  domain_keywords?: string[]
+  seniority?: string | null
+  work_mode?: string | null
+  employment_type?: string | null
 }
 
 const STATUS_OPTIONS = ["saved", "applied", "interviewing", "offer", "rejected", "withdrawn"]
@@ -115,6 +127,88 @@ function MetaStat({ label, value }: { label: string; value?: string | null }) {
 
 function EmptyMessage({ message }: { message: string }) {
   return <p className="text-sm leading-6 text-text-muted">{message}</p>
+}
+
+function StructuredTagGroup({
+  label,
+  values
+}: {
+  label: string
+  values?: string[]
+}) {
+  if (!values?.length) return null
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">{label}</p>
+      <div className="flex flex-wrap gap-2">
+        {values.map((value) => (
+          <span
+            key={`${label}-${value}`}
+            className="inline-flex items-center rounded-full border border-sky-100 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-800"
+          >
+            {value}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function StructuredJobDescriptionPanel({
+  structured
+}: {
+  structured?: StructuredJobDescription | null
+}) {
+  if (!structured) return null
+
+  const hasContent = Boolean(
+    structured.role_focus ||
+    structured.must_have_skills?.length ||
+      structured.preferred_skills?.length ||
+      structured.responsibilities?.length ||
+      structured.domain_keywords?.length ||
+      structured.seniority ||
+      structured.work_mode ||
+      structured.employment_type
+  )
+
+  if (!hasContent) return null
+
+  return (
+    <div className="space-y-5 rounded-[24px] border border-slate-200 bg-white px-5 py-5 shadow-sm shadow-sky-100/30">
+      {structured.role_focus ? (
+        <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Role focus</p>
+          <p className="text-sm leading-6 text-text">{structured.role_focus}</p>
+        </div>
+      ) : null}
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <MetaStat label="Seniority" value={structured.seniority} />
+        <MetaStat label="Work mode" value={structured.work_mode} />
+        <MetaStat label="Employment" value={structured.employment_type} />
+      </div>
+
+      <StructuredTagGroup label="Must-have skills" values={structured.must_have_skills} />
+      <StructuredTagGroup label="Preferred skills" values={structured.preferred_skills} />
+      <StructuredTagGroup label="Domain keywords" values={structured.domain_keywords} />
+
+      {structured.responsibilities?.length ? (
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Responsibilities</p>
+          <ul className="space-y-2 text-sm leading-6 text-text">
+            {structured.responsibilities.map((item, index) => (
+              <li key={index} className="flex gap-3">
+                <span className="mt-2 h-1.5 w-1.5 rounded-full bg-primary/70" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 function SaveStateMessage({
@@ -270,6 +364,17 @@ function ResumePreview({ resumes }: { resumes: ResumeRecord[] }) {
                       <p className="text-sm font-semibold text-text">{entry.heading || "Untitled entry"}</p>
                       {entry.subheading ? (
                         <p className="mt-1 text-sm text-text-secondary">{entry.subheading}</p>
+                      ) : null}
+                      {entry.url ? (
+                        <a
+                          href={entry.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          View link
+                        </a>
                       ) : null}
                     </div>
                     <div className="min-w-[140px] space-y-1 text-right text-xs text-text-muted">
@@ -527,6 +632,7 @@ export default function JobDetail({ jobId, onBack }: JobDetailProps) {
 
   const statusColor = STATUS_COLORS[job.status] || STATUS_COLORS.saved
   const notesDirty = notesDraft !== (job.notes || "")
+  const structuredJobDescription = (job.structured_job_description || null) as StructuredJobDescription | null
 
   return (
     <div className="space-y-6">
@@ -618,13 +724,16 @@ export default function JobDetail({ jobId, onBack }: JobDetailProps) {
             title="Job Description"
             subtitle="The cleaned description saved for this application."
           >
-            {job.job_description ? (
-              <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-5 text-sm leading-7 text-text whitespace-pre-wrap">
-                {job.job_description}
-              </div>
-            ) : (
-              <EmptyMessage message="No job description was saved for this application." />
-            )}
+            <div className="space-y-4">
+              <StructuredJobDescriptionPanel structured={structuredJobDescription} />
+              {job.job_description ? (
+                <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-5 text-sm leading-7 text-text whitespace-pre-wrap">
+                  {job.job_description}
+                </div>
+              ) : (
+                <EmptyMessage message="No job description was saved for this application." />
+              )}
+            </div>
           </SectionCard>
 
           <SectionCard

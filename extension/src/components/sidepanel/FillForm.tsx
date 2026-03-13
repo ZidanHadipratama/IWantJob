@@ -389,6 +389,7 @@ export default function FillForm() {
           resume_json: resumeJson,
           persona_text: personaText || undefined,
           job_description: activeJobContext?.job_description || undefined,
+          structured_job_description: activeJobContext?.structured_job_description as any || undefined,
         })
         debug("FillForm", "fill-form response:", result)
 
@@ -503,6 +504,7 @@ export default function FillForm() {
         title: activeContext.job_title || "Unknown Position",
         url: activeContext.job_url || undefined,
         job_description: activeContext.job_description,
+        structured_job_description: activeContext.structured_job_description as any || undefined,
         tailored_resume_json: activeContext.tailored_resume_json,
         qa_pairs: qaPairs
       })
@@ -520,6 +522,7 @@ export default function FillForm() {
           phase: "tailored",
           jobId: savedJobId,
           jdText: activeContext.job_description,
+          structuredJobDescription: activeContext.structured_job_description || null,
           company: result.job.company,
           jobTitle: result.job.title,
           jobUrl: activeContext.job_url,

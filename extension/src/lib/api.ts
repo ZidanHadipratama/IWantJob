@@ -48,6 +48,7 @@ export interface JobDetail {
   title: string
   url?: string
   job_description?: string
+  structured_job_description?: StructuredJobDescription
   status: string
   job_type?: string
   employment_type?: string
@@ -67,6 +68,7 @@ export interface JobMutation {
   title: string
   url?: string
   job_description?: string
+  structured_job_description?: StructuredJobDescription
   status?: string
   job_type?: string
   employment_type?: string
@@ -84,6 +86,7 @@ export interface JobMutationResult {
   employment_type?: string
   location?: string
   salary_range?: string
+  structured_job_description?: StructuredJobDescription
   notes?: string
   created_at: string
 }
@@ -95,6 +98,17 @@ export interface TailorJobInfo {
   employment_type?: string
   location?: string
   salary_range?: string
+}
+
+export interface StructuredJobDescription {
+  role_focus?: string | null
+  must_have_skills: string[]
+  preferred_skills: string[]
+  responsibilities: string[]
+  domain_keywords: string[]
+  seniority?: string | null
+  work_mode?: string | null
+  employment_type?: string | null
 }
 
 export interface DraftSaveResult {
@@ -132,6 +146,7 @@ export interface ApiClient {
   }): Promise<{
     tailored_resume_json: object
     job_info: TailorJobInfo
+    structured_job_description?: StructuredJobDescription
     match_score: number
     job_id?: string
   }>
@@ -143,6 +158,7 @@ export interface ApiClient {
     persona_text?: string
     job_id?: string
     job_description?: string
+    structured_job_description?: StructuredJobDescription
   }): Promise<{ answers: object[]; job_id?: string; qa_saved: boolean }>
   saveApplicationDraft(req: {
     job_id?: string
@@ -155,6 +171,7 @@ export interface ApiClient {
     employment_type?: string
     location?: string
     salary_range?: string
+    structured_job_description?: StructuredJobDescription
     notes?: string
     tailored_resume_json: object
     qa_pairs?: QAPairItem[]
@@ -170,6 +187,7 @@ export interface ApiClient {
     employment_type?: string
     location?: string
     salary_range?: string
+    structured_job_description?: StructuredJobDescription
     notes?: string
   }): Promise<JobMutationResult>
   getJob(jobId: string): Promise<JobDetail>

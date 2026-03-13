@@ -1,9 +1,10 @@
-import json
 import logging
 import time
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.datastructures import Headers
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.routers import resume, form, jobs, connection
 
@@ -35,37 +36,66 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    """Log incoming requests and outgoing responses for debugging."""
-    if request.method == "OPTIONS":
-        return await call_next(request)
+class RequestLoggingMiddleware:
+    """ASGI middleware that logs request and response metadata without using call_next."""
 
-    # Log request
-    ai_provider = request.headers.get("x-ai-provider", "-")
-    ai_model = request.headers.get("x-ai-model", "-")
-    has_ai_key = "yes" if request.headers.get("x-ai-key") else "no"
-    has_sb_url = "yes" if request.headers.get("x-supabase-url") else "no"
-    has_sb_key = "yes" if request.headers.get("x-supabase-key") else "no"
-    user_id = request.headers.get("x-user-id", "-")
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
 
-    logger.info(
-        ">>> %s %s | user=%s | ai=%s/%s key=%s | supabase url=%s key=%s",
-        request.method, request.url.path,
-        user_id, ai_provider, ai_model, has_ai_key,
-        has_sb_url, has_sb_key,
-    )
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-    start = time.time()
-    response: Response = await call_next(request)
-    elapsed = time.time() - start
+        method = scope.get("method", "GET")
+        path = scope.get("path", "")
+        if method == "OPTIONS":
+            await self.app(scope, receive, send)
+            return
 
-    logger.info(
-        "<<< %s %s | %d | %.1fs",
-        request.method, request.url.path,
-        response.status_code, elapsed,
-    )
-    return response
+        headers = Headers(scope=scope)
+        ai_provider = headers.get("x-ai-provider", "-")
+        ai_model = headers.get("x-ai-model", "-")
+        has_ai_key = "yes" if headers.get("x-ai-key") else "no"
+        has_sb_url = "yes" if headers.get("x-supabase-url") else "no"
+        has_sb_key = "yes" if headers.get("x-supabase-key") else "no"
+        user_id = headers.get("x-user-id", "-")
+
+        logger.info(
+            ">>> %s %s | user=%s | ai=%s/%s key=%s | supabase url=%s key=%s",
+            method,
+            path,
+            user_id,
+            ai_provider,
+            ai_model,
+            has_ai_key,
+            has_sb_url,
+            has_sb_key,
+        )
+
+        start = time.time()
+        status_code: int | None = None
+
+        async def send_wrapper(message: Message) -> None:
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = int(message["status"])
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_wrapper)
+        finally:
+            elapsed = time.time() - start
+            logger.info(
+                "<<< %s %s | %s | %.1fs",
+                method,
+                path,
+                status_code if status_code is not None else "-",
+                elapsed,
+            )
+
+
+app.add_middleware(RequestLoggingMiddleware)
 
 
 app.include_router(resume.router)

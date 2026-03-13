@@ -148,6 +148,10 @@ def _build_styles():
         "proj_desc", fontName=FONT_ITALIC, fontSize=FS_SMALL,
         leading=FS_SMALL * 1.3, textColor=BLACK,
     )
+    s["proj_url"] = ParagraphStyle(
+        "proj_url", fontName=FONT_NORMAL, fontSize=FS_SMALL,
+        leading=FS_SMALL * 1.25, textColor=BLACK,
+    )
     s["bullet"] = ParagraphStyle(
         "bullet", fontName=FONT_NORMAL, fontSize=FS_SMALL,
         leading=FS_SMALL * 1.35, leftIndent=14, firstLineIndent=-8,
@@ -232,6 +236,15 @@ def _project_block(name, url, description, bullets, styles, W):
     else:
         name_markup = f'<b>{name_esc}</b>'
     group.append(Paragraph(name_markup, styles["proj_name"]))
+
+    if url:
+        url_esc = _esc(url)
+        group.append(
+            Paragraph(
+                f'<link href="{url_esc}" color="#000000">{url_esc}</link>',
+                styles["proj_url"],
+            )
+        )
 
     if description:
         group.append(Paragraph(_esc(description), styles["proj_desc"]))

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import { Settings, PanelRight, CheckCircle, XCircle } from "lucide-react"
 import { getStorage } from "~lib/storage"
+import BrandMark from "~components/BrandMark"
 
 import "./style.css"
 
@@ -37,9 +38,7 @@ function Popup() {
   return (
     <div className="w-72 p-5 font-sans">
       <div className="flex items-center gap-2.5 mb-4">
-        <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-          <span className="text-white font-bold text-sm">IW</span>
-        </div>
+        <BrandMark size="sm" showWordmark={false} />
         <div>
           <h1 className="text-base font-bold text-text">IWantJob</h1>
           <div className="flex items-center gap-1.5">

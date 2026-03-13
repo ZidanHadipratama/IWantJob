@@ -1,30 +1,56 @@
+<p>
+  <img src="extension/assets/icon.png" alt="IWantJob logo" width="56" height="56">
+</p>
+
 # IWantJob
 
 IWantJob is an open-source Chrome extension plus FastAPI backend for AI-assisted job applications.
 
-It helps you extract job descriptions, tailor a resume to a specific role, generate draft answers for application forms, and save approved applications into a tracker and detail workspace.
+It is built for a review-first workflow:
+- extract the job description from the current tab
+- tailor a resume to the role
+- generate draft form answers
+- autofill supported fields in the browser
+- save only the reviewed application into a tracker and detail workspace
 
-## What It Does
+The product is intentionally draft-first. AI output is editable before it touches the tracker, so the saved record reflects the application you approved, not the model's first pass.
+
+## Why It Exists
+
+Most AI job-application tools stop at a demo:
+- they tailor a resume once
+- generate a few answers
+- and ignore the messy reality of review, recovery, autofill limits, and tracking
+
+IWantJob is designed around those edges. It keeps the useful AI steps, but adds the workflow around them:
+- local draft review before save
+- field-level autofill reporting
+- iframe and custom-form handling
+- a real tracker and job detail workspace
+
+## Product Surface
+
+### Core flow
+
+`Resume` -> `Fill Form` -> `Save to Tracker`
+
+1. Extract the job description from the current tab.
+2. Tailor your resume against that role.
+3. Generate draft answers for the application form.
+4. Review and edit everything locally.
+5. Autofill supported controls if it helps.
+6. Save the approved application into the tracker.
+
+### What it does
 
 - Extracts job descriptions from the current tab
-- Tailors your resume against a specific role
+- Tailors a resume against a specific role
 - Generates draft Q&A for application forms
-- Lets you review and edit AI output before saving
-- Saves approved applications into a tracker backed by Supabase
-- Opens saved applications in a detail workspace with notes, resume, and Q&A
-
-## Current Workflow
-
-The current product flow is draft-first:
-
-1. Open a job page and extract the job description in the sidepanel
-2. Tailor your resume for that job
-3. Open the Fill Form tab and generate draft answers
-4. Edit the resume and answers locally
-5. Click `Save to Tracker` only when the draft is ready
-6. Manage the saved application later from the tracker and detail view
-
-This is important: AI output is not supposed to auto-save immediately. The tracker is intended to store reviewed application records, not raw first-pass drafts.
+- Autofills supported text, select, radio, checkbox, file, custom combobox, and iframe-hosted form flows
+- Keeps AI output editable before save
+- Uses optional persona context to improve answer framing
+- Saves approved applications into a Supabase-backed tracker
+- Opens saved applications in a detail workspace with notes, resume, Q&A, and structured JD data
 
 ## Screenshots
 
@@ -34,11 +60,11 @@ These screenshots were captured from the current UI with Playwright.
   <tr>
     <td valign="top">
       <img src="assets/readme/sidepanel-resume-draft.png" alt="Resume tailoring sidepanel with an unsaved tailored resume draft" width="320">
-      <p><strong>Resume draft in the sidepanel</strong><br>Review the extracted role, edit the tailored resume inline, then explicitly save only when the draft is ready.</p>
+      <p><strong>Resume draft in the sidepanel</strong><br>Review the extracted role, edit the tailored resume inline, then continue into Fill Form for the final review-and-save flow.</p>
     </td>
     <td valign="top">
       <img src="assets/readme/sidepanel-fill-form-draft.png" alt="Fill Form sidepanel with editable generated answers" width="320">
-      <p><strong>Editable Fill Form answers</strong><br>Generated answers stay local and editable so the user can clean them up before anything is written to Supabase.</p>
+      <p><strong>Editable Fill Form answers</strong><br>Generated answers stay local and editable so the user can clean them up, autofill supported fields, and save to Supabase only when the application draft is approved.</p>
     </td>
   </tr>
 </table>
@@ -48,27 +74,19 @@ These screenshots were captured from the current UI with Playwright.
 </p>
 <p><strong>Tracker detail workspace</strong><br>Once saved, each application opens in a richer workspace for status updates, notes, saved Q&amp;A, and resume review.</p>
 
-## Core Product Areas
+## Product Areas
 
 ### Sidepanel
 
-- `Resume`
-  Extracts the JD, generates a tailored resume, supports inline editing, and saves approved drafts
-
-- `Fill Form`
-  Extracts form fields, generates draft answers, and keeps them editable until you save from Resume
-
-- `Tracker`
-  Opens the saved application tracker workflow
-
-- `Logs`
-  Helps inspect extension-side debug output
+- `Resume` — extract the JD, generate a tailored resume, edit it inline, then hand off to Fill Form for final review
+- `Fill Form` — extract fields, generate draft answers, use optional persona context, autofill supported controls, and act as the final explicit save surface
+- `Tracker` — open the saved application tracker workflow
 
 ### Options Page
 
 - Job tracker with search, filtering, sorting, editing, and delete
 - Full job detail workspace for JD, tailored resume, Q&A, notes, and status
-- Settings for backend URL, AI configuration, Supabase configuration, and base resume
+- Settings for backend URL, AI configuration, Supabase configuration, base resume, and optional persona text
 
 ### Backend
 
@@ -76,24 +94,24 @@ These screenshots were captured from the current UI with Playwright.
 - LiteLLM-based AI provider abstraction
 - Supabase-backed persistence for jobs, resumes, and Q&A
 
-## Architecture
-
-The project has 3 main pieces:
-
-- `extension/`
-  A Plasmo-based Chrome extension with content scripts, sidepanel UI, and options page
-
-- `backend/`
-  A FastAPI service that handles AI calls, PDF generation, and Supabase-backed data operations
-
-- `supabase/`
-  SQL migrations for the user-owned database schema
-
 IWantJob uses a Bring-Your-Own stack:
 
 - your AI provider key
 - your Supabase project
 - your local backend process
+
+## Architecture
+
+The project has 3 main pieces:
+
+- `extension/`
+  Plasmo-based Chrome extension with content scripts, sidepanel UI, and options page
+
+- `backend/`
+  FastAPI service for AI calls, PDF generation, and Supabase-backed persistence
+
+- `supabase/`
+  SQL migrations for the user-owned database schema
 
 ## Repository Layout
 
@@ -102,22 +120,116 @@ IWantJob/
 ├── extension/   # Chrome extension (Plasmo + React + TypeScript)
 ├── backend/     # FastAPI backend
 ├── supabase/    # DB migrations
-├── docs/        # PRD, SRS, roadmap, release checklist, planning docs
-└── design-system/
+└── assets/      # Public README images and demo assets
 ```
 
-## Current Status
+## Run Locally
 
-The implementation has already reached:
+### 1. Install dependencies
 
-- draft-first sidepanel workflow
-- explicit save-to-tracker flow
-- tracker and job detail workspace
-- structured JD extraction and metadata extraction
-- tailored resume PDF generation
-- recovery handling for saved vs unsaved drafts
+Repo root:
 
-The repository now has a public-facing setup guide and a screenshot-backed workflow overview. The remaining documentation work is mostly publish-readiness polish around sharing and safe push boundaries.
+```bash
+npm install
+```
+
+Extension:
+
+```bash
+cd extension
+npm install
+```
+
+Backend:
+
+```bash
+cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+### 2. Start the backend
+
+Choose one supported backend path.
+
+### Option A: Docker
+
+```bash
+docker compose up --build -d backend
+```
+
+Stop it later with:
+
+```bash
+docker compose down
+```
+
+### Option B: Local Python
+
+```bash
+.venv/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Both paths expose the backend at:
+
+```text
+http://localhost:8000
+```
+
+Health check:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+### 3. Prepare Supabase
+
+You need your own Supabase project.
+
+- Create a project in Supabase
+- Apply the SQL migrations in `supabase/migrations/`
+- Collect:
+  - project URL
+  - anon/service key used by this local workflow
+
+If you use the Supabase CLI from the repo root:
+
+```bash
+supabase db push
+```
+
+### 4. Build the extension
+
+```bash
+npm run build
+```
+
+### 5. Load the extension in Chrome
+
+In Chrome:
+
+1. Open `chrome://extensions`
+2. Enable `Developer mode`
+3. Click `Load unpacked`
+4. Select `extension/build/chrome-mv3-prod`
+
+### 6. Configure the extension
+
+Open the extension options page and provide:
+
+- Backend URL
+  - usually `http://localhost:8000`
+- Supabase URL
+- Supabase key
+- Base resume
+- AI provider/model/key
+- Persona text (optional)
+
+The product currently expects a Bring-Your-Own setup:
+
+- your backend process
+- your Supabase project
+- your AI credentials
 
 ## License
 
@@ -136,110 +248,21 @@ The paid hosted service can still include separate infrastructure, secrets,
 model/provider accounts, prompts, deployment automation, and operational
 services that are not part of this repository.
 
-## Setup
-
-### 1. Clone and install dependencies
-
-At the repo root:
-
-```bash
-npm install
-```
-
-For the extension:
-
-```bash
-cd extension
-npm install
-```
-
-For the backend:
-
-```bash
-cd backend
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-```
-
-### 2. Start the backend
-
-From `backend/`:
-
-```bash
-.venv/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-Alternative:
-
-```bash
-docker compose up backend
-```
-
-The backend defaults to `http://localhost:8000`.
-
-### 3. Prepare Supabase
-
-You need your own Supabase project.
-
-- Create a project in Supabase
-- Apply the SQL migrations in `supabase/migrations/`
-- Collect:
-  - project URL
-  - anon/service key used by this local workflow
-
-If you use the Supabase CLI from the repo root:
-
-```bash
-supabase db push
-```
-
-### 4. Build and load the extension
-
-From `extension/`:
-
-```bash
-npm run build
-```
-
-Then in Chrome:
-
-1. Open `chrome://extensions`
-2. Enable `Developer mode`
-3. Click `Load unpacked`
-4. Select `extension/build/chrome-mv3-prod`
-
-### 5. Configure the extension
-
-Open the extension options page and provide:
-
-- Backend URL
-  - usually `http://localhost:8000`
-- Supabase URL
-- Supabase key
-- Base resume
-- AI provider/model/key
-
-The product currently expects a Bring-Your-Own setup:
-
-- your backend process
-- your Supabase project
-- your AI credentials
-
 ### 6. Run Playwright smoke tests
 
 From `extension/`:
 
 ```bash
 npx playwright install chromium
-npm run test:e2e
+PLAYWRIGHT_SKIP_EXTENSION_BUILD=1 npx playwright test tests/smoke.spec.ts
 ```
 
-The Playwright run will build the extension automatically, load the unpacked MV3 build into Chromium, and smoke-test the popup, sidepanel, and options page.
+This is the safest first-run path in this repo. It uses the existing build instead of forcing a rebuild inside the Playwright command.
 
 If you want a visible browser window:
 
 ```bash
-npm run test:e2e:headed
+PLAYWRIGHT_SKIP_EXTENSION_BUILD=1 npx playwright test tests/smoke.spec.ts --headed
 ```
 
 On WSL, headed mode requires GUI support such as WSLg or an X server with `DISPLAY` configured. If Linux browser dependencies are missing, run:
@@ -267,13 +290,14 @@ npx playwright install --with-deps chromium
 6. Switch to `Fill Form`
 7. Click `Get Form Fields`
 8. Generate draft answers and edit them locally
-9. Go back to `Resume`
-10. Click `Save to Tracker`
+9. Use `Autofill Form` for supported controls if helpful
+10. Click `Save to Tracker` from `Fill Form`
 
 Important:
 
 - tailoring does not save automatically
 - form generation does not save automatically
+- autofill does not save automatically
 - the tracker is meant to contain reviewed application records only
 
 ### After saving
@@ -304,7 +328,19 @@ Check:
 
 - an AI provider/model/key is configured
 - a base resume is saved in settings
+- persona is optional, so missing persona is not a blocker
 - the page actually contains a readable JD or form
+
+### Autofill only partially works
+
+This is expected on some job sites.
+
+Check:
+
+- some fields are intentionally left for manual review
+- composite phone fields and custom upload widgets may require manual input
+- large choice sets may be skipped unless you explicitly include selected flagged fields
+- embedded forms inside iframes are supported, but some hosts still use custom widgets the browser cannot safely control
 
 ### The tracker still shows nothing
 
@@ -336,5 +372,5 @@ This is usually a workflow issue, not a model issue:
 ## Notes
 
 - This is not a hosted SaaS product. You are expected to run the backend and provide your own credentials.
+- The backend has a verified Docker path, but the Chrome extension still runs as a normal unpacked extension in your local browser.
 - The current build flow uses `npm run build` for the extension.
-- Manual release/testing guidance currently lives in [docs/release-checklist.md](docs/release-checklist.md).

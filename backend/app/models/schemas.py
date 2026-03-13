@@ -95,6 +95,19 @@ class JobInfo(BaseModel):
     salary_range: Optional[str] = None
 
 
+class StructuredJobDescription(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    role_focus: Optional[str] = None
+    must_have_skills: list[str] = Field(default_factory=list)
+    preferred_skills: list[str] = Field(default_factory=list)
+    responsibilities: list[str] = Field(default_factory=list)
+    domain_keywords: list[str] = Field(default_factory=list)
+    seniority: Optional[str] = None
+    work_mode: Optional[str] = None
+    employment_type: Optional[str] = None
+
+
 class FillFormRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -105,6 +118,7 @@ class FillFormRequest(BaseModel):
     user_profile: Optional[UserProfile] = None
     job_id: Optional[UUID] = None
     job_description: Optional[str] = None
+    structured_job_description: Optional[StructuredJobDescription] = None
 
 
 class FillFormResponse(BaseModel):
@@ -136,6 +150,7 @@ class TailorResumeResponse(BaseModel):
 
     tailored_resume_json: ResumeJSON
     job_info: JobInfo
+    structured_job_description: StructuredJobDescription
     match_score: float
     job_id: Optional[UUID] = None
 
@@ -153,6 +168,7 @@ class LogJobRequest(BaseModel):
     employment_type: Optional[str] = None
     location: Optional[str] = None
     salary_range: Optional[str] = None
+    structured_job_description: Optional[StructuredJobDescription] = None
     notes: Optional[str] = None
 
 
@@ -191,6 +207,7 @@ class LogJobResponse(BaseModel):
     employment_type: Optional[str] = None
     location: Optional[str] = None
     salary_range: Optional[str] = None
+    structured_job_description: Optional[StructuredJobDescription] = None
     notes: Optional[str] = None
     created_at: str
 
@@ -208,6 +225,7 @@ class SaveApplicationDraftRequest(BaseModel):
     employment_type: Optional[str] = None
     location: Optional[str] = None
     salary_range: Optional[str] = None
+    structured_job_description: Optional[StructuredJobDescription] = None
     notes: Optional[str] = None
     tailored_resume_json: ResumeJSON
     qa_pairs: list[QAPair] = Field(default_factory=list)
@@ -233,6 +251,7 @@ class JobListItem(BaseModel):
     employment_type: Optional[str] = None
     location: Optional[str] = None
     salary_range: Optional[str] = None
+    structured_job_description: Optional[StructuredJobDescription] = None
     applied_at: Optional[str] = None
     created_at: str
 
@@ -250,6 +269,7 @@ class JobResponse(BaseModel):
     employment_type: Optional[str] = None
     location: Optional[str] = None
     salary_range: Optional[str] = None
+    structured_job_description: Optional[StructuredJobDescription] = None
     applied_at: Optional[str] = None
     notes: Optional[str] = None
     created_at: str

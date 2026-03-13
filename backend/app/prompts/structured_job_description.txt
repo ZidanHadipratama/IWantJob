@@ -1,0 +1,34 @@
+Analyze the following job description and normalize it into structured JSON.
+
+Rules:
+- Return ONLY valid JSON.
+- Keep each list concise and high-signal.
+- `must_have_skills` should contain the required hard skills, tools, and core technologies.
+- `preferred_skills` should contain nice-to-have or bonus skills.
+- `responsibilities` should contain short action-oriented bullets.
+- `domain_keywords` should contain ATS-relevant domain or technical keywords.
+- `role_focus` should be one concise sentence describing what this role is fundamentally about (for example: "AI engineer focused on agentic pipelines, RAG systems, and workflow automation"), or null if unclear.
+- `seniority` should be one of: intern, junior, mid-level, senior, staff, lead, manager, or null.
+- `work_mode` should be one of: remote, hybrid, onsite, or null.
+- `employment_type` should be one of: full-time, part-time, contract, internship, temporary, freelance, or null.
+- Do not invent requirements that are not supported by the job description.
+
+Use the heuristic summary below as a starting point, but improve it when the job description clearly supports a better normalized result.
+
+Heuristic summary:
+{heuristic_summary}
+
+Return this schema:
+{
+  "role_focus": "One concise sentence about the role's core focus, or null",
+  "must_have_skills": ["..."],
+  "preferred_skills": ["..."],
+  "responsibilities": ["..."],
+  "domain_keywords": ["..."],
+  "seniority": "senior",
+  "work_mode": "remote",
+  "employment_type": "full-time"
+}
+
+Job Description:
+{job_description}
