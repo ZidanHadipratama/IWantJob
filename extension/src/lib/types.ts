@@ -43,6 +43,17 @@ export interface ResumeJson {
   sections: ResumeSection[]
 }
 
+export type EditableResumeContact = Required<ResumeContact>
+
+export type EditableResumeSkills = Required<ResumeSkills>
+
+export interface EditableResumeJson {
+  contact: EditableResumeContact
+  summary: string
+  skills: EditableResumeSkills | null
+  sections: ResumeSection[]
+}
+
 export interface StructuredJobDescription {
   role_focus?: string | null
   must_have_skills: string[]

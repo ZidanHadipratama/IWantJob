@@ -2,48 +2,17 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { Loader, AlertCircle, CheckCircle, Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react"
 import { getStorage, setStorage } from "~lib/storage"
 import { createApiClient } from "~lib/api"
+import { normalizeEditableResume } from "~lib/resume-model"
+import type {
+  EditableResumeContact,
+  EditableResumeJson,
+  EditableResumeSkills,
+  ResumeSection,
+  ResumeSectionEntry
+} from "~lib/types"
 
 interface ResumeUploadCardProps {
   onConfigChange?: (configured: boolean) => void
-}
-
-interface SectionEntry {
-  heading: string
-  subheading: string
-  dates?: string
-  location?: string
-  url?: string
-  bullets: string[]
-}
-
-interface ResumeSection {
-  title: string
-  entries: SectionEntry[]
-}
-
-interface ResumeContact {
-  name: string
-  email: string
-  phone: string
-  location: string
-  linkedin: string
-  github: string
-  website: string
-  work_authorization: string
-}
-
-interface ResumeSkills {
-  languages: string[]
-  frameworks: string[]
-  tools: string[]
-  other: string[]
-}
-
-interface ParsedResume {
-  contact: ResumeContact
-  summary: string
-  skills: ResumeSkills | null
-  sections: ResumeSection[]
 }
 
 const WORK_AUTH_OPTIONS = [
@@ -55,101 +24,12 @@ const WORK_AUTH_OPTIONS = [
   { value: "other", label: "Other" }
 ]
 
-const EMPTY_CONTACT: ResumeContact = {
-  name: "", email: "", phone: "", location: "",
-  linkedin: "", github: "", website: "", work_authorization: ""
-}
-
-function toEditable(raw: any): ParsedResume {
-  const c = raw?.contact || {}
-  const sections: ResumeSection[] = []
-
-  // Handle new format (sections array)
-  if (raw?.sections) {
-    for (const s of raw.sections) {
-      sections.push({
-        title: s.title || "",
-        entries: (s.entries || []).map((e: any) => ({
-          heading: e.heading || "",
-          subheading: e.subheading || "",
-          dates: e.dates || "",
-          location: e.location || "",
-          url: e.url || "",
-          bullets: e.bullets || [],
-        })),
-      })
-    }
-  }
-
-  // Migrate old format if no sections found
-  if (sections.length === 0) {
-    if (raw?.experience?.length) {
-      sections.push({
-        title: "Experience",
-        entries: raw.experience.map((e: any) => ({
-          heading: `${e.title || ""} at ${e.company || ""}`.trim(),
-          subheading: [e.start_date, e.end_date || "Present"].filter(Boolean).join(" - ") +
-            (e.location ? ` | ${e.location}` : ""),
-          dates: [e.start_date, e.end_date || "Present"].filter(Boolean).join(" - "),
-          location: e.location || "",
-          url: e.url || "",
-          bullets: e.bullets || [],
-        })),
-      })
-    }
-    if (raw?.education?.length) {
-      sections.push({
-        title: "Education",
-        entries: raw.education.map((e: any) => ({
-          heading: `${e.degree || ""} - ${e.school || ""}`.trim(),
-          subheading: [e.start_date, e.end_date].filter(Boolean).join(" - ") +
-            (e.gpa ? ` | GPA: ${e.gpa}` : ""),
-          dates: [e.start_date, e.end_date].filter(Boolean).join(" - "),
-          url: e.url || "",
-          bullets: [],
-        })),
-      })
-    }
-    if (raw?.projects?.length) {
-      sections.push({
-        title: "Projects",
-        entries: raw.projects.map((p: any) => ({
-          heading: p.name || "",
-          subheading: p.technologies?.join(", ") || "",
-          url: p.url || "",
-          bullets: p.bullets || [],
-        })),
-      })
-    }
-  }
-
-  return {
-    contact: {
-      name: c.name || "",
-      email: c.email || "",
-      phone: c.phone || "",
-      location: c.location || "",
-      linkedin: c.linkedin || "",
-      github: c.github || "",
-      website: c.website || "",
-      work_authorization: c.work_authorization || "",
-    },
-    summary: raw?.summary || "",
-    skills: raw?.skills ? {
-      languages: raw.skills.languages || [],
-      frameworks: raw.skills.frameworks || [],
-      tools: raw.skills.tools || [],
-      other: raw.skills.other || [],
-    } : null,
-    sections,
-  }
-}
 
 function ContactFields({ contact, onChange }: {
-  contact: ResumeContact
-  onChange: (c: ResumeContact) => void
+  contact: EditableResumeContact
+  onChange: (c: EditableResumeContact) => void
 }) {
-  const fields: { key: keyof ResumeContact; label: string; placeholder: string }[] = [
+  const fields: { key: keyof EditableResumeContact; label: string; placeholder: string }[] = [
     { key: "name", label: "Full Name", placeholder: "John Doe" },
     { key: "email", label: "Email", placeholder: "john@example.com" },
     { key: "phone", label: "Phone", placeholder: "+1 234 567 890" },
@@ -192,10 +72,10 @@ function ContactFields({ contact, onChange }: {
 }
 
 function SkillsFields({ skills, onChange }: {
-  skills: ResumeSkills
-  onChange: (s: ResumeSkills) => void
+  skills: EditableResumeSkills
+  onChange: (s: EditableResumeSkills) => void
 }) {
-  const categories: { key: keyof ResumeSkills; label: string }[] = [
+  const categories: { key: keyof EditableResumeSkills; label: string }[] = [
     { key: "languages", label: "Languages" },
     { key: "frameworks", label: "Frameworks" },
     { key: "tools", label: "Tools" },
@@ -234,7 +114,7 @@ function SectionEditor({ section, onUpdate, onRemove }: {
 }) {
   const [collapsed, setCollapsed] = useState(false)
 
-  function updateEntry(idx: number, entry: SectionEntry) {
+  function updateEntry(idx: number, entry: ResumeSectionEntry) {
     const entries = [...section.entries]
     entries[idx] = entry
     onUpdate({ ...section, entries })
@@ -247,7 +127,7 @@ function SectionEditor({ section, onUpdate, onRemove }: {
   function addEntry() {
     onUpdate({
       ...section,
-      entries: [...section.entries, { heading: "", subheading: "", dates: "", location: "", url: "", bullets: [] }]
+      entries: [...section.entries, { heading: "", subheading: "", dates: "", location: "", url: "", bullets: [] } satisfies ResumeSectionEntry]
     })
   }
 
@@ -378,7 +258,7 @@ export function ResumeUploadCard({ onConfigChange }: ResumeUploadCardProps) {
   const [isParsing, setIsParsing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState("")
-  const [editData, setEditData] = useState<ParsedResume | null>(null)
+  const [editData, setEditData] = useState<EditableResumeJson | null>(null)
   const [savedIndicator, setSavedIndicator] = useState(false)
   const textDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const editDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -393,7 +273,7 @@ export function ResumeUploadCard({ onConfigChange }: ResumeUploadCardProps) {
       getStorage("base_resume_json")
     ]).then(([text, json]) => {
       if (json) {
-        setEditData(toEditable(json))
+        setEditData(normalizeEditableResume(json))
         onConfigChangeRef.current?.(true)
       }
       if (text) {
@@ -459,7 +339,7 @@ export function ResumeUploadCard({ onConfigChange }: ResumeUploadCardProps) {
       const result = await client.parseResume(resumeText)
 
       if (result.resume_json) {
-        const editable = toEditable(result.resume_json)
+        const editable = normalizeEditableResume(result.resume_json)
         setEditData(editable)
         await setStorage("base_resume_json", result.resume_json)
         await setStorage("base_resume_text", resumeText)
@@ -511,13 +391,13 @@ export function ResumeUploadCard({ onConfigChange }: ResumeUploadCardProps) {
 
   function addSection() {
     if (!editData) return
-    setEditData({
-      ...editData,
-      sections: [...editData.sections, {
-        title: "New Section",
-        entries: [{ heading: "", subheading: "", dates: "", location: "", url: "", bullets: [] }]
-      }]
-    })
+      setEditData({
+        ...editData,
+        sections: [...editData.sections, {
+          title: "New Section",
+          entries: [{ heading: "", subheading: "", dates: "", location: "", url: "", bullets: [] } satisfies ResumeSectionEntry]
+        }]
+      })
   }
 
   function updateSection(idx: number, section: ResumeSection) {

@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 
 import { createApiClient, type JobDetail as JobDetailRecord, type QAPairItem, type ResumeRecord } from "~lib/api"
+import { parseStoredResumeJson } from "~lib/resume-model"
 import type { ResumeContact, ResumeJson, ResumeSkills, StructuredJobDescription } from "~lib/types"
 
 interface JobDetailProps {
@@ -193,21 +194,7 @@ function parseStoredResume(record?: ResumeRecord | null): ResumeJson | null {
   if (!record) return null
 
   const candidate = (record as ResumeRecord & { resume_json?: unknown }).resume_json ?? record.resume_text
-  if (!candidate) return null
-
-  if (typeof candidate === "string") {
-    try {
-      return JSON.parse(candidate) as ResumeJson
-    } catch {
-      return null
-    }
-  }
-
-  if (typeof candidate === "object") {
-    return candidate as ResumeJson
-  }
-
-  return null
+  return parseStoredResumeJson(candidate)
 }
 
 function getTailoredResume(resumes: ResumeRecord[]) {
