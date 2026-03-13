@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/brand/iw-mark.svg" alt="IWantJob logo" width="112" height="112">
   <h1>IWantJob</h1>
-  <p><strong>Open-source Chrome extension + FastAPI backend for AI-assisted job applications.</strong></p>
+  <p><strong>AI-powered job applications — from job post to submitted form — in one open-source Chrome extension.</strong></p>
   <p>
   <img alt="Chrome extension" src="https://img.shields.io/badge/Chrome-Extension-0F766E?style=flat-square">
   <img alt="Backend" src="https://img.shields.io/badge/FastAPI-Backend-0D9488?style=flat-square">
@@ -10,108 +10,106 @@
 </p>
 </div>
 
-IWantJob is built for a review-first workflow:
-- extract a job description from the current tab
-- tailor a resume to the role
-- generate draft answers for application forms
-- autofill supported controls in the browser
-- save only the reviewed application into a tracker and detail workspace
+<br>
 
-The product is intentionally draft-first. AI output is editable before it touches the tracker, so the saved record reflects the application you approved, not the model's first pass.
+<div align="center">
+  <img src="assets/demo/gifs/resume-to-fill-flow.gif" alt="Full workflow: extract JD, tailor resume, generate form answers" width="720">
+  <p><em>Extract a job description, tailor your resume, generate form answers — then review everything before saving.</em></p>
+</div>
 
-## Quick Links
+<br>
 
-- [Why It Exists](#why-it-exists)
-- [What You Can Do](#what-you-can-do)
-- [How It Works](#how-it-works)
-- [Screenshots](#screenshots)
-- [Run Locally](#run-locally)
-- [Development](#development)
-- [Architecture](#architecture)
-- [License](#license)
+IWantJob gives you a complete AI-assisted application workflow inside your browser. Extract a job description from any tab, tailor your resume to the role, generate draft answers for the application form, autofill supported fields, and save the reviewed result into a personal tracker — all without leaving the page.
 
-## Why It Exists
+Everything is **draft-first**. AI output stays local and editable until you explicitly save it. The tracker records the application *you* approved, not the model's first pass.
 
-Most AI job-application tools stop at a demo:
-- they tailor a resume once
-- generate a few answers
-- and ignore the messy reality of review, recovery, autofill limits, and tracking
+**Bring your own stack** — your AI key, your Supabase database, your local backend. No SaaS, no subscriptions, fully open source.
 
-IWantJob is designed around those edges. It keeps the useful AI steps, but adds the workflow around them:
-- local draft review before save
-- field-level autofill reporting
-- iframe and custom-form handling
-- a real tracker and job detail workspace
+---
 
-## What You Can Do
-
-- Extract job descriptions from the active tab
-- Tailor a resume against a specific role
-- Generate draft Q&A for application forms
-- Autofill supported text, select, radio, checkbox, file, custom combobox, and iframe-hosted form flows
-- Keep AI output editable before save
-- Use optional persona context to improve answer framing
-- Save approved applications into a Supabase-backed tracker
-- Open saved applications in a detail workspace with notes, resume, Q&A, and structured JD data
-
-## How It Works
-
-`Resume` -> `Fill Form` -> `Save to Tracker`
-
-1. Extract the job description from the current tab.
-2. Tailor your resume against that role.
-3. Generate draft answers for the application form.
-4. Review and edit everything locally.
-5. Autofill supported controls if it helps.
-6. Save the approved application into the tracker.
-
-## Screenshots
-
-These screenshots were captured from the current UI with Playwright.
+## Features
 
 <table>
   <tr>
-    <td valign="top">
-      <img src="assets/readme/sidepanel-resume-draft.png" alt="Resume tailoring sidepanel with an unsaved tailored resume draft" width="320">
-      <p><strong>Resume draft in the sidepanel</strong><br>Review the extracted role, edit the tailored resume inline, then continue into Fill Form for the final review-and-save flow.</p>
+    <td width="50%" valign="top">
+      <h3>Resume Tailoring</h3>
+      <img src="assets/readme/sidepanel-resume-draft.png" alt="Resume tailoring sidepanel" width="100%">
+      <p>Extract the job description from the active tab and generate a resume tailored to that specific role. Edit inline before moving to the application form.</p>
     </td>
-    <td valign="top">
-      <img src="assets/readme/sidepanel-fill-form-draft.png" alt="Fill Form sidepanel with editable generated answers" width="320">
-      <p><strong>Editable Fill Form answers</strong><br>Generated answers stay local and editable so the user can clean them up, autofill supported fields, and save to Supabase only when the application draft is approved.</p>
+    <td width="50%" valign="top">
+      <h3>Form Fill + Autofill</h3>
+      <img src="assets/readme/sidepanel-fill-form-draft.png" alt="Fill Form sidepanel with generated answers" width="100%">
+      <p>Scan the application form, generate draft answers grounded in your resume and the JD, then autofill supported fields — text, select, radio, checkbox, file upload, custom comboboxes, and iframe-hosted forms.</p>
     </td>
   </tr>
 </table>
 
-<p>
-  <img src="assets/readme/tracker-job-detail.png" alt="Tracker detail workspace showing saved metadata, job description, tailored resume, and saved Q and A" width="100%">
-</p>
-<p><strong>Tracker detail workspace</strong><br>Once saved, each application opens in a richer workspace for status updates, notes, saved Q&amp;A, and resume review.</p>
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>Application Tracker</h3>
+      <img src="assets/readme/tracker-job-detail.png" alt="Tracker detail workspace" width="100%">
+      <p>Every saved application gets a full detail workspace — job description, tailored resume, all Q&A pairs, notes, and status tracking. Search, filter, sort, and manage applications from a single view.</p>
+    </td>
+    <td width="50%" valign="top">
+      <h3>Your Stack, Your Data</h3>
+      <ul>
+        <li><strong>AI provider:</strong> OpenAI, Anthropic, Gemini, DeepSeek, or Ollama</li>
+        <li><strong>Database:</strong> Your own Supabase project</li>
+        <li><strong>Backend:</strong> Self-hosted FastAPI (Docker or local Python)</li>
+        <li><strong>Persona:</strong> Optional context to improve answer framing beyond your resume</li>
+      </ul>
+      <p>No telemetry. No analytics. No API keys stored on any server. Keys are passed per-request in headers and never persisted by the backend.</p>
+    </td>
+  </tr>
+</table>
 
-## Product Surface
+---
 
-### Sidepanel
+## How It Works
 
-- `Resume` — extract the JD, generate a tailored resume, edit it inline, then hand off to Fill Form for final review
-- `Fill Form` — extract fields, generate draft answers, use optional persona context, autofill supported controls, and act as the final explicit save surface
-- `Tracker` — open the saved application tracker workflow
+```
+  Extract JD  ──>  Tailor Resume  ──>  Fill Form  ──>  Review & Edit  ──>  Save to Tracker
+```
 
-### Options Page
+| Step | What happens |
+|------|-------------|
+| **1. Extract** | Open a job posting. The extension pulls the job description from the page using Mozilla Readability. |
+| **2. Tailor** | Generate a resume tailored to that role. Review the structured preview, edit sections inline, download as PDF. |
+| **3. Fill** | Switch to the application form. Extract fields, generate draft answers, review each one. |
+| **4. Autofill** | Push reviewed answers into supported form controls. Get a field-by-field fill report showing what worked and what needs manual entry. |
+| **5. Save** | Save the approved application — JD, tailored resume, and all Q&A pairs — into your Supabase-backed tracker. |
 
-- Job tracker with search, filtering, sorting, editing, and delete
-- Full job detail workspace for JD, tailored resume, Q&A, notes, and status
-- Settings for backend URL, AI configuration, Supabase configuration, base resume, and optional persona text
+<details>
+<summary><strong>See it in action</strong></summary>
 
-### Backend
+<br>
 
-- FastAPI API for tailoring, form generation, PDF generation, and CRUD
-- LiteLLM-based AI provider abstraction
-- Supabase-backed persistence for jobs, resumes, and Q&A
+**Settings and initial setup**
 
-IWantJob uses a Bring-Your-Own stack:
+<img src="assets/demo/gifs/settings-and-bootstrap.gif" alt="Settings configuration walkthrough" width="720">
 
-- your AI provider key
-- your Supabase project
-- your local backend process
+<br>
+
+**Form fill and autofill**
+
+<img src="assets/demo/gifs/fill-form-and-autofill.gif" alt="Form fill and autofill demo" width="720">
+
+<br>
+
+**Save and tracker workspace**
+
+<img src="assets/demo/gifs/save-and-tracker-workspace.gif" alt="Save application and view in tracker" width="720">
+
+<br>
+
+**Advanced form support (iframes, comboboxes)**
+
+<img src="assets/demo/gifs/advanced-form-support.gif" alt="Advanced form support demo" width="720">
+
+</details>
+
+---
 
 ## Run Locally
 
@@ -119,172 +117,142 @@ IWantJob uses a Bring-Your-Own stack:
 
 - Node.js + npm
 - Python 3.11+
-- a Supabase project
-- an AI provider key
-- Chrome or Chromium for the extension
+- A [Supabase](https://supabase.com) project
+- An AI provider API key (OpenAI, Anthropic, Gemini, DeepSeek, or local Ollama)
+- Chrome or Chromium
 
-### 1. Install dependencies
-
-Repo root:
+### 1. Clone and install
 
 ```bash
-npm install
-```
+git clone https://github.com/anthropics/IWantJob.git
+cd IWantJob
 
-Extension:
+# Extension dependencies
+cd extension && npm install && cd ..
 
-```bash
-cd extension
-npm install
-```
-
-Backend:
-
-```bash
+# Backend dependencies
 cd backend
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+cd ..
 ```
 
-### 2. Start the backend
+### 2. Set up Supabase
 
-Choose one supported backend path.
+Apply the SQL migrations in `supabase/migrations/` to your Supabase project:
 
-### Option A: Docker
+```bash
+# Using Supabase CLI
+supabase db push
+
+# Or paste the migration SQL files into the Supabase Dashboard SQL editor
+```
+
+Collect your **project URL** and **anon key** — you'll need them in the extension settings.
+
+### 3. Start the backend
+
+<table>
+<tr>
+<td width="50%">
+
+**Docker** (recommended)
 
 ```bash
 docker compose up --build -d backend
 ```
 
-Stop it later with:
+</td>
+<td width="50%">
+
+**Local Python**
 
 ```bash
-docker compose down
+cd backend
+.venv/bin/python3 -m uvicorn \
+  app.main:app \
+  --host 0.0.0.0 --port 8000 --reload
 ```
 
-### Option B: Local Python
+</td>
+</tr>
+</table>
+
+Both expose the backend at `http://localhost:8000`. Verify with:
 
 ```bash
-.venv/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+curl http://localhost:8000/health
 ```
 
-Both paths expose the backend at:
-
-```text
-http://localhost:8000
-```
-
-Health check:
+### 4. Build and load the extension
 
 ```bash
-curl http://127.0.0.1:8000/health
+cd extension && npm run build
 ```
-
-### 3. Prepare Supabase
-
-You need your own Supabase project.
-
-- Create a project in Supabase
-- Apply the SQL migrations in `supabase/migrations/`
-- Collect:
-  - project URL
-  - anon/service key used by this local workflow
-
-If you use the Supabase CLI from the repo root:
-
-```bash
-supabase db push
-```
-
-### 4. Build the extension
-
-```bash
-npm run build
-```
-
-### 5. Load the extension in Chrome
 
 In Chrome:
-
 1. Open `chrome://extensions`
-2. Enable `Developer mode`
-3. Click `Load unpacked`
+2. Enable **Developer mode**
+3. Click **Load unpacked**
 4. Select `extension/build/chrome-mv3-prod`
 
-### 6. Configure the extension
+### 5. Configure
 
-Open the extension options page and provide:
+Open the extension options page and set:
 
-- Backend URL
-  - usually `http://localhost:8000`
-- Supabase URL
-- Supabase key
-- Base resume
-- AI provider/model/key
-- Persona text (optional)
+- **Backend URL** — `http://localhost:8000`
+- **Supabase URL** + **key**
+- **AI provider**, **model**, and **API key**
+- **Base resume** (paste your resume text)
+- **Persona** (optional — adds context beyond your resume for better answers)
 
-The product currently expects a Bring-Your-Own setup:
+---
 
-- your backend process
-- your Supabase project
-- your AI credentials
+## Architecture
+
+```
+Chrome Extension  ──HTTPS──>  FastAPI Backend  ──>  Supabase (user-owned)
+(Plasmo + React)                    │
+                                    v
+                              LiteLLM (AI abstraction)
+                              OpenAI / Anthropic / Gemini / DeepSeek / Ollama
+```
+
+| Layer | Stack |
+|-------|-------|
+| Extension | Plasmo + React 18 + TypeScript + Tailwind CSS |
+| Backend | FastAPI + LiteLLM + ReportLab (PDF) |
+| Database | Supabase (PostgreSQL) |
+| Deployment | Docker Compose or local Python |
+
+```
+IWantJob/
+├── extension/   # Chrome extension (Plasmo + React + TypeScript)
+├── backend/     # FastAPI backend (Python)
+├── supabase/    # Database migrations
+└── assets/      # Screenshots and demo GIFs
+```
+
+---
 
 ## Development
 
 ### Playwright smoke tests
 
-From `extension/`:
-
 ```bash
+cd extension
 npx playwright install chromium
 PLAYWRIGHT_SKIP_EXTENSION_BUILD=1 npx playwright test tests/smoke.spec.ts
 ```
 
-This is the safest first-run path in this repo. It uses the existing build instead of forcing a rebuild inside the Playwright command.
-
-If you want a visible browser window:
-
-```bash
-PLAYWRIGHT_SKIP_EXTENSION_BUILD=1 npx playwright test tests/smoke.spec.ts --headed
-```
-
-On WSL, headed mode requires GUI support such as WSLg or an X server with `DISPLAY` configured. If Linux browser dependencies are missing, run:
+For a visible browser window, add `--headed`. On WSL, this requires WSLg or an X server. If browser dependencies are missing:
 
 ```bash
 npx playwright install --with-deps chromium
 ```
 
-## Architecture
-
-The project has 3 main pieces:
-
-- `extension/` — Plasmo-based Chrome extension with content scripts, sidepanel UI, and options page
-- `backend/` — FastAPI service for AI calls, PDF generation, and Supabase-backed persistence
-- `supabase/` — SQL migrations for the user-owned database schema
-
-## Repository Layout
-
-```text
-IWantJob/
-├── extension/   # Chrome extension (Plasmo + React + TypeScript)
-├── backend/     # FastAPI backend
-├── supabase/    # DB migrations
-└── assets/      # Public README images and demo assets
-```
+---
 
 ## License
 
-This repository is licensed under the GNU Affero General Public License v3.0.
-See [LICENSE](./LICENSE).
-
-That means:
-
-- You can self-host, modify, and redistribute this code
-- If you run a modified version for users over a network, you must offer the corresponding source code for that modified version
-- The repository license does not grant rights to the `IWantJob` name, logo, or product branding
-
-See [TRADEMARKS.md](./TRADEMARKS.md) for the branding policy.
-
-The paid hosted service can still include separate infrastructure, secrets,
-model/provider accounts, prompts, deployment automation, and operational
-services that are not part of this repository.
+[AGPL-3.0](./LICENSE) — you can self-host, modify, and redistribute. Network use of a modified version requires offering the corresponding source. The license does not grant rights to the IWantJob name or branding ([TRADEMARKS.md](./TRADEMARKS.md)).
