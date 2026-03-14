@@ -13,7 +13,7 @@
 <br>
 
 <div align="center">
-  <img src="assets/demo/gifs/resume-to-fill-flow.gif" alt="Full workflow: extract JD, tailor resume, generate form answers" width="720">
+  <img src="assets/demo/gifs/Tailor.gif" alt="Full workflow: extract JD, tailor resume, generate form answers" width="720">
   <p><em>Extract a job description, tailor your resume, generate form answers — then review everything before saving.</em></p>
 </div>
 
@@ -33,12 +33,12 @@ Everything is **draft-first**. AI output stays local and editable until you expl
   <tr>
     <td width="50%" valign="top">
       <h3>Resume Tailoring</h3>
-      <img src="assets/readme/sidepanel-resume-draft.png" alt="Resume tailoring sidepanel" width="100%">
+      <img src="assets/demo/gifs/Tailor.gif" alt="Full workflow: extract JD, tailor resume, generate form answers">
       <p>Extract the job description from the active tab and generate a resume tailored to that specific role. Edit inline before moving to the application form.</p>
     </td>
     <td width="50%" valign="top">
       <h3>Form Fill + Autofill</h3>
-      <img src="assets/readme/sidepanel-fill-form-draft.png" alt="Fill Form sidepanel with generated answers" width="100%">
+      <img src="assets/demo/gifs/Form Fill.gif" alt="Fill Form sidepanel with generated answers" width="100%">
       <p>Scan the application form, generate draft answers grounded in your resume and the JD, then autofill supported fields — text, select, radio, checkbox, file upload, custom comboboxes, and iframe-hosted forms.</p>
     </td>
   </tr>
@@ -93,13 +93,13 @@ Everything is **draft-first**. AI output stays local and editable until you expl
 
 **Form fill and autofill**
 
-<img src="assets/demo/gifs/fill-form-and-autofill.gif" alt="Form fill and autofill demo" width="720">
+<img src="assets/demo/gifs/Form Fill.gif" alt="Form fill and autofill demo" width="720">
 
 <br>
 
 **Save and tracker workspace**
 
-<img src="assets/demo/gifs/save-and-tracker-workspace.gif" alt="Save application and view in tracker" width="720">
+<img src="assets/demo/gifs/Tracker.gif" alt="Save application and view in tracker" width="720">
 
 <br>
 
