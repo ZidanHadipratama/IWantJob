@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react"
-import { FileText, Download, Loader, AlertCircle, CheckCircle, Copy, RefreshCw, ChevronDown, ChevronRight, Pencil, X, Plus, Trash2 } from "lucide-react"
+import { FileText, Download, Loader, AlertCircle, CheckCircle, Copy, RefreshCw, ChevronDown, ChevronRight, X, Plus, ScrollText } from "lucide-react"
+import { OUTPUT_LANGUAGE_OPTIONS } from "~lib/output-language"
 import type { ResumeContact, ResumeJson, ResumeSkills } from "~lib/types"
 import { useResumeController } from "./useResumeController"
 
@@ -15,10 +16,9 @@ export default function Resume() {
     tailoredJson,
     matchScore,
     copied,
-    persistenceState,
+    outputLanguage,
     saveTone,
     saveMessage,
-    hasLocalEditsOnSavedJob,
     metadataWarning,
     handleExtractJD,
     handleTailor,
@@ -26,6 +26,8 @@ export default function Resume() {
     handleDownloadPdf,
     handleResumeChange,
     handleReset,
+    handleContinueToCoverLetter,
+    handleOutputLanguageChange,
     handleContinueToFillForm
   } = useResumeController()
 
@@ -83,8 +85,18 @@ export default function Resume() {
               {company && <p className="text-xs text-text-muted">{company}</p>}
             </div>
           )}
-          <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            This is still a local draft. Nothing will be saved to your tracker until the explicit save step.
+          <div className="card p-3">
+            <label className="label mb-2 block">Output Language</label>
+            <select
+              value={outputLanguage}
+              onChange={(event) => void handleOutputLanguageChange(event.target.value)}
+              className="input-field">
+              {OUTPUT_LANGUAGE_OPTIONS.map((language) => (
+                <option key={language} value={language}>
+                  {language}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="card p-3 max-h-48 overflow-y-auto">
             <p className="text-xs text-text-secondary whitespace-pre-wrap">{jdText}</p>
@@ -125,36 +137,33 @@ export default function Resume() {
               {company && <p className="text-xs text-text-muted">{company}</p>}
             </div>
           )}
-          <div className="rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 text-xs text-sky-800">
-            {hasLocalEditsOnSavedJob
-              ? "Recovered a saved application with new local edits. Save again to sync these changes back to the tracker."
-              : persistenceState === "saved"
-              ? "Saved to tracker. Any new edits here or in Fill Form will switch this back to an unsaved draft."
-              : "Unsaved draft. Review and edit this resume now; the tracker stays unchanged until you explicitly save later."}
-          </div>
           <div className="card p-3 max-h-96 overflow-y-auto space-y-3">
             <ResumePreview resume={tailoredJson} onChange={handleResumeChange} />
           </div>
-          <p className="text-xs text-text-muted text-center">Click any text to edit before downloading</p>
           <button
             onClick={handleContinueToFillForm}
             className="btn-primary w-full flex items-center justify-center gap-2">
             <CheckCircle className="w-4 h-4" />
             Continue to Fill Form
           </button>
-          <p className="text-xs text-text-muted text-center">
-            Review answers, autofill the page, and save to the tracker from the Fill Form tab.
-          </p>
-          <div className="flex gap-2">
-            <button onClick={handleCopy}
-              className="btn-primary flex-1 flex items-center justify-center gap-2">
-              {copied ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              {copied ? "Copied!" : "Copy Text"}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleContinueToCoverLetter}
+              className="flex-1 text-xs text-primary hover:text-primary-dark font-medium flex items-center justify-center gap-1 py-1.5 cursor-pointer">
+              <ScrollText className="w-3.5 h-3.5" />
+              Cover Letter
             </button>
+            <span className="text-gray-300">|</span>
+            <button onClick={handleCopy}
+              className="flex-1 text-xs text-text-muted hover:text-primary font-medium flex items-center justify-center gap-1 py-1.5 cursor-pointer">
+              {copied ? <CheckCircle className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? "Copied!" : "Copy"}
+            </button>
+            <span className="text-gray-300">|</span>
             <button onClick={handleDownloadPdf} disabled={downloading}
-              className="btn-accent flex-1 flex items-center justify-center gap-2">
-              {downloading ? <Loader className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              {downloading ? "Generating..." : "Download PDF"}
+              className="flex-1 text-xs text-text-muted hover:text-primary font-medium flex items-center justify-center gap-1 py-1.5 cursor-pointer disabled:opacity-60">
+              {downloading ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+              {downloading ? "PDF..." : "PDF"}
             </button>
           </div>
         </>

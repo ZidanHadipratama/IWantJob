@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react"
 import { createApiClient } from "~lib/api"
 import { debug, debugError } from "~lib/debug"
 import { sendToContentScript } from "~lib/messaging"
+import { normalizeOutputLanguage } from "~lib/output-language"
 import {
   getStorage,
   normalizeActiveJobContext,
@@ -31,6 +32,10 @@ export interface ResumeController {
   pageExcerpt: string
   metadataLines: string[]
   tailoredJson: ResumeJson | null
+  coverLetterText: string
+  coverLetterLoading: boolean
+  coverLetterCopied: boolean
+  outputLanguage: string
   matchScore: number
   copied: boolean
   persistenceState: "draft" | "saved"
@@ -42,6 +47,12 @@ export interface ResumeController {
   handleTailor: () => Promise<void>
   handleCopy: () => Promise<void>
   handleDownloadPdf: () => Promise<void>
+  handleContinueToCoverLetter: () => Promise<void>
+  handleOutputLanguageChange: (value: string) => Promise<void>
+  handleGenerateCoverLetter: () => Promise<void>
+  handleCoverLetterChange: (value: string) => void
+  handleCopyCoverLetter: () => Promise<void>
+  handleDownloadCoverLetter: () => Promise<void>
   handleResumeChange: (nextResume: ResumeJson) => void
   handleReset: () => void
   handleContinueToFillForm: () => Promise<void>
@@ -105,6 +116,14 @@ function resumeToText(resume: ResumeJson): string {
   return lines.join("\n")
 }
 
+function sanitizeFilenamePart(value: string, fallback: string): string {
+  const normalized = value
+    .replace(/[^a-z0-9]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+
+  return normalized || fallback
+}
+
 export function useResumeController(): ResumeController {
   const [phase, setPhase] = useState<ResumePhase>("idle")
   const [loading, setLoading] = useState(false)
@@ -120,6 +139,10 @@ export function useResumeController(): ResumeController {
   const [pageExcerpt, setPageExcerpt] = useState("")
   const [metadataLines, setMetadataLines] = useState<string[]>([])
   const [tailoredJson, setTailoredJson] = useState<ResumeJson | null>(null)
+  const [coverLetterText, setCoverLetterText] = useState("")
+  const [coverLetterLoading, setCoverLetterLoading] = useState(false)
+  const [coverLetterCopied, setCoverLetterCopied] = useState(false)
+  const [outputLanguage, setOutputLanguage] = useState("English")
   const [matchScore, setMatchScore] = useState(0)
   const [copied, setCopied] = useState(false)
   const [persistenceState, setPersistenceState] = useState<"draft" | "saved">("draft")
@@ -136,6 +159,7 @@ export function useResumeController(): ResumeController {
     setJobId(session.jobId || null)
     setJdText(session.jdText)
     setStructuredJobDescription(session.structuredJobDescription || null)
+    setCoverLetterText(session.coverLetterText || "")
     setCompany(session.company)
     setJobTitle(session.jobTitle)
     setJobUrl(session.jobUrl)
@@ -152,11 +176,13 @@ export function useResumeController(): ResumeController {
     Promise.all([
       getStorage("resume_session"),
       getStorage("active_job_context"),
-      getStorage("fillform_session")
-    ]).then(([sessionRaw, contextRaw, fillFormRaw]) => {
+      getStorage("fillform_session"),
+      getStorage("output_language")
+    ]).then(([sessionRaw, contextRaw, fillFormRaw, outputLanguageRaw]) => {
       const session = normalizeResumeSession(sessionRaw)
       const context = normalizeActiveJobContext(contextRaw)
       const fillFormSession = normalizeFillFormSession(fillFormRaw)
+      setOutputLanguage(normalizeOutputLanguage(outputLanguageRaw))
 
       if (context) {
         if (session) {
@@ -166,6 +192,7 @@ export function useResumeController(): ResumeController {
           setJobId(context.job_id || null)
           setJdText(context.job_description)
           setStructuredJobDescription(context.structured_job_description || null)
+          setCoverLetterText(context.cover_letter_text || "")
           setCompany(context.company)
           setJobTitle(context.job_title)
           setJobUrl(context.job_url)
@@ -216,6 +243,10 @@ export function useResumeController(): ResumeController {
           setSaveMessage("")
         }
       }
+
+      if (changes.output_language) {
+        setOutputLanguage(normalizeOutputLanguage(changes.output_language.newValue))
+      }
     }
 
     chrome.storage.onChanged.addListener(handleStorageChange)
@@ -234,6 +265,7 @@ export function useResumeController(): ResumeController {
     nextPageExcerpt: string,
     nextMetadataLines: string[],
     nextTailoredJson: ResumeJson | null,
+    nextCoverLetterText: string,
     nextMatchScore: number,
     inFlightRequest: InFlightRequest | null = null
   ) => {
@@ -242,6 +274,7 @@ export function useResumeController(): ResumeController {
       jobId: id,
       jdText: jd,
       structuredJobDescription: structured,
+      coverLetterText: nextCoverLetterText,
       company: nextCompany,
       jobTitle: nextJobTitle,
       jobUrl: nextJobUrl,
@@ -287,6 +320,7 @@ export function useResumeController(): ResumeController {
       job_id: jobId,
       job_description: jdText,
       structured_job_description: structuredJobDescription,
+      cover_letter_text: coverLetterText,
       company,
       job_title: jobTitle,
       job_url: jobUrl,
@@ -308,6 +342,7 @@ export function useResumeController(): ResumeController {
     pageExcerpt,
     metadataLines,
     tailoredJson,
+    coverLetterText,
     syncActiveJobContext
   ])
 
@@ -331,6 +366,7 @@ export function useResumeController(): ResumeController {
       setCompany(result.company || "")
       setJobTitle(result.job_title || "")
       setStructuredJobDescription(null)
+      setCoverLetterText("")
       setPageTitle(result.page_title || "")
       setPageExcerpt(result.readability_excerpt || "")
       setMetadataLines(result.metadata_lines || [])
@@ -352,6 +388,7 @@ export function useResumeController(): ResumeController {
         result.readability_excerpt || "",
         result.metadata_lines || [],
         null,
+        "",
         0
       )
     } catch (err) {
@@ -386,6 +423,7 @@ export function useResumeController(): ResumeController {
         pageExcerpt,
         metadataLines,
         tailoredJson,
+        coverLetterText,
         matchScore,
         { id: requestId, kind: "tailor_resume" }
       )
@@ -398,6 +436,7 @@ export function useResumeController(): ResumeController {
       const tailorResult = await client.tailorResume({
         job_description: jdText,
         resume_json: resumeJson,
+        output_language: outputLanguage,
         company: companyName,
         title,
         url: jobUrl,
@@ -429,6 +468,7 @@ export function useResumeController(): ResumeController {
       setCompany(resolvedCompany)
       setJobTitle(resolvedTitle)
       setTailoredJson(json)
+      setCoverLetterText("")
       setMatchScore(tailorResult.match_score)
       setPersistenceState("draft")
       setSaveTone("neutral")
@@ -446,6 +486,7 @@ export function useResumeController(): ResumeController {
         pageExcerpt,
         metadataLines,
         json,
+        "",
         tailorResult.match_score,
         null
       )
@@ -466,6 +507,7 @@ export function useResumeController(): ResumeController {
           pageExcerpt,
           metadataLines,
           tailoredJson,
+          coverLetterText,
           matchScore,
           null
         )
@@ -479,10 +521,12 @@ export function useResumeController(): ResumeController {
     }
   }, [
     company,
+    outputLanguage,
     jdText,
     jobId,
     jobTitle,
     jobUrl,
+    coverLetterText,
     matchScore,
     metadataLines,
     pageExcerpt,
@@ -508,8 +552,10 @@ export function useResumeController(): ResumeController {
       const blob = await client.generatePdf(tailoredJson)
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement("a")
+      const companyPart = sanitizeFilenamePart(company || "company", "company")
+      const namePart = sanitizeFilenamePart(tailoredJson.contact.name || "resume", "resume")
       anchor.href = url
-      anchor.download = `${tailoredJson.contact.name || "resume"}_tailored.pdf`
+      anchor.download = `CV_${companyPart}_${namePart}.pdf`
       anchor.click()
       URL.revokeObjectURL(url)
       debug("Resume", "PDF downloaded successfully")
@@ -519,7 +565,128 @@ export function useResumeController(): ResumeController {
     } finally {
       setDownloading(false)
     }
-  }, [tailoredJson])
+  }, [company, tailoredJson])
+
+  const handleGenerateCoverLetter = useCallback(async () => {
+    if (!tailoredJson || !jdText.trim()) {
+      setError("Tailor the resume first before generating a cover letter.")
+      return
+    }
+
+    setCoverLetterLoading(true)
+    setError("")
+    try {
+      const [personaTextRaw] = await Promise.all([getStorage("persona_text")])
+      const personaText = typeof personaTextRaw === "string" ? personaTextRaw.trim() : ""
+      const client = await createApiClient()
+      const result = await client.generateCoverLetter({
+        job_description: jdText,
+        resume_json: tailoredJson,
+        persona_text: personaText || undefined,
+        output_language: outputLanguage,
+        company: company || undefined,
+        title: jobTitle || undefined,
+        structured_job_description: structuredJobDescription || undefined
+      })
+      setPersistenceState("draft")
+      setSaveTone("neutral")
+      setSaveMessage("")
+      setCoverLetterText(result.cover_letter_text || "")
+      await saveSession(
+        phase,
+        jobId,
+        jdText,
+        structuredJobDescription,
+        company,
+        jobTitle,
+        jobUrl,
+        pageTitle,
+        pageExcerpt,
+        metadataLines,
+        tailoredJson,
+        result.cover_letter_text || "",
+        matchScore,
+        null
+      )
+    } catch (err) {
+      debugError("Resume", "Cover letter generation failed:", err)
+      setError(err instanceof Error ? err.message : "Failed to generate cover letter")
+    } finally {
+      setCoverLetterLoading(false)
+    }
+  }, [
+    company,
+    outputLanguage,
+    jdText,
+    jobId,
+    jobTitle,
+    jobUrl,
+    matchScore,
+    metadataLines,
+    pageExcerpt,
+    pageTitle,
+    phase,
+    saveSession,
+    structuredJobDescription,
+    tailoredJson
+  ])
+
+  const handleCoverLetterChange = useCallback((value: string) => {
+    setPersistenceState("draft")
+    setSaveTone("neutral")
+    setSaveMessage("")
+    setCoverLetterText(value)
+    void saveSession(
+      phase,
+      jobId,
+      jdText,
+      structuredJobDescription,
+      company,
+      jobTitle,
+      jobUrl,
+      pageTitle,
+      pageExcerpt,
+      metadataLines,
+      tailoredJson,
+      value,
+      matchScore,
+      null
+    )
+  }, [
+    company,
+    jdText,
+    jobId,
+    jobTitle,
+    jobUrl,
+    matchScore,
+    metadataLines,
+    pageExcerpt,
+    pageTitle,
+    phase,
+    saveSession,
+    structuredJobDescription,
+    tailoredJson
+  ])
+
+  const handleCopyCoverLetter = useCallback(async () => {
+    if (!coverLetterText.trim()) return
+    await navigator.clipboard.writeText(coverLetterText)
+    setCoverLetterCopied(true)
+    setTimeout(() => setCoverLetterCopied(false), 2000)
+  }, [coverLetterText])
+
+  const handleDownloadCoverLetter = useCallback(async () => {
+    if (!coverLetterText.trim()) return
+    const blob = new Blob([coverLetterText], { type: "text/plain;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    const companyPart = (company || "company").replace(/[^a-z0-9]+/gi, "_")
+    const titlePart = (jobTitle || "cover_letter").replace(/[^a-z0-9]+/gi, "_")
+    anchor.href = url
+    anchor.download = `${companyPart}_${titlePart}_cover_letter.txt`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }, [company, coverLetterText, jobTitle])
 
   const handleResumeChange = useCallback((nextResume: ResumeJson) => {
     setPersistenceState("draft")
@@ -539,6 +706,7 @@ export function useResumeController(): ResumeController {
     setPageExcerpt("")
     setMetadataLines([])
     setTailoredJson(null)
+    setCoverLetterText("")
     setStructuredJobDescription(null)
     setMatchScore(0)
     setError("")
@@ -553,6 +721,16 @@ export function useResumeController(): ResumeController {
 
   const handleContinueToFillForm = useCallback(async () => {
     await setStorage("sidepanel_active_tab", "fill-form")
+  }, [])
+
+  const handleContinueToCoverLetter = useCallback(async () => {
+    await setStorage("sidepanel_active_tab", "cover-letter")
+  }, [])
+
+  const handleOutputLanguageChange = useCallback(async (value: string) => {
+    const nextValue = normalizeOutputLanguage(value)
+    setOutputLanguage(nextValue)
+    await setStorage("output_language", nextValue)
   }, [])
 
   return {
@@ -570,6 +748,10 @@ export function useResumeController(): ResumeController {
     pageExcerpt,
     metadataLines,
     tailoredJson,
+    coverLetterText,
+    coverLetterLoading,
+    coverLetterCopied,
+    outputLanguage,
     matchScore,
     copied,
     persistenceState,
@@ -584,6 +766,12 @@ export function useResumeController(): ResumeController {
     handleTailor,
     handleCopy,
     handleDownloadPdf,
+    handleContinueToCoverLetter,
+    handleOutputLanguageChange,
+    handleGenerateCoverLetter,
+    handleCoverLetterChange,
+    handleCopyCoverLetter,
+    handleDownloadCoverLetter,
     handleResumeChange,
     handleReset,
     handleContinueToFillForm

@@ -1,9 +1,12 @@
 import type { PlasmoCSConfig } from "plasmo"
 import { Readability } from "@mozilla/readability"
+import { debug, debugError } from "~lib/debug"
 import type {
   AutofillAnswerInput,
+  AutofillDiagnostics,
+  AutofillFilePayload,
   AutofillResultItem,
-  AutofillResumeFilePayload,
+  ExtractFormDiagnostics,
   FormField,
   FormFieldOption
 } from "~lib/types"
@@ -16,14 +19,34 @@ export const config: PlasmoCSConfig = {
 // ── JD Extraction ────────────────────────────────────────────────────────
 
 const JD_MAX_LENGTH = 15000
-const MAIN_CONTENT_SELECTOR =
-  "main, article, [role='main'], .job-description, .jd-description, " +
-  "#job-description, .posting-page, .job-details, .job-posting"
+const MAIN_CONTENT_SELECTORS = [
+  ".rad-job-detail__primary-content",
+  "[id*='job-description'].rad-accordion-atom",
+  ".rad-job-detail",
+  "main",
+  "article",
+  "[role='main']",
+  ".job-description",
+  ".jd-description",
+  "#job-description",
+  ".posting-page",
+  ".job-details",
+  ".job-posting"
+]
 const BLOCK_TAGS = new Set(["ARTICLE", "ASIDE", "BLOCKQUOTE", "DD", "DIV", "DT", "H1", "H2", "H3", "H4", "H5", "H6", "LI", "OL", "P", "SECTION", "UL"])
 const METADATA_LABEL_RE =
   /^(location|location type|employment type|job type|work type|workplace|department|team|compensation|salary|pay|schedule|commitment|experience level|seniority|timezone|time zone|work authorization|visa)$/i
 const BOILERPLATE_RE =
   /^(apply now|sign in|sign up|share this job|save job|report job|back to jobs|cookie preferences|privacy policy|terms of service)$/i
+
+function findFirstMatchingContainer(root: ParentNode, selectors: string[]): HTMLElement | null {
+  for (const selector of selectors) {
+    const match = root.querySelector(selector)
+    if (match instanceof HTMLElement) return match
+  }
+
+  return null
+}
 
 function pruneForReadability(doc: Document) {
   const selectors = [
@@ -200,15 +223,110 @@ function buildJDText(metadataLines: string[], bodyText: string, fallbackBlocks: 
   return tidyJDText(merged || fallbackText)
 }
 
+function getPreferredJDContainer(root: ParentNode): HTMLElement | null {
+  return findFirstMatchingContainer(root, MAIN_CONTENT_SELECTORS)
+}
+
+function getLinkedInJDContainer(root: ParentNode): HTMLElement | null {
+  const selectors = [
+    "#job-details",
+    ".jobs-description__content #job-details",
+    ".jobs-description__content",
+    ".jobs-description",
+    ".jobs-search__job-details--container .jobs-description"
+  ]
+
+  return findFirstMatchingContainer(root, selectors)
+}
+
+function getAccentureJDContainer(root: ParentNode): HTMLElement | null {
+  const selectors = [
+    ".rad-job-detail__primary-content",
+    "[id*='job-description'].rad-accordion-atom",
+    ".rad-job-detail"
+  ]
+
+  return findFirstMatchingContainer(root, selectors)
+}
+
 function extractJD(): { text: string; page_title?: string; company?: string; job_title?: string; metadata_lines?: string[]; readability_title?: string; readability_excerpt?: string; readability_siteName?: string; used_readability: boolean } {
   const body = document.body
   if (!body) return { text: "", used_readability: false }
+  const hostname = window.location.hostname.toLowerCase()
+  const pageHint = getPageHint()
+  const isAccentureCareersPage =
+    (hostname === "accenture.com" || hostname.endsWith(".accenture.com")) &&
+    window.location.pathname.toLowerCase().includes("/careers/jobdetails")
+  const isLinkedInJobsPage = pageHint === "linkedin"
+  const accentureContainer = isAccentureCareersPage ? getAccentureJDContainer(body) : null
+
+  if (isLinkedInJobsPage) {
+    const linkedInContainer = getLinkedInJDContainer(body)
+    if (linkedInContainer) {
+      const linkedInStructured = collectStructuredContent(linkedInContainer)
+      const linkedInText = buildJDText(
+        linkedInStructured.metadataLines,
+        linkedInContainer.innerText || "",
+        linkedInStructured.bodyBlocks
+      )
+
+      debug("detector", "JD extraction candidate", {
+        url: window.location.href,
+        hostname,
+        page_hint: pageHint,
+        root: linkedInContainer.id ? `#${linkedInContainer.id}` : linkedInContainer.className || linkedInContainer.tagName,
+        text_length: linkedInText.length
+      })
+
+      if (linkedInText.trim().length >= 120) {
+        return {
+          text: linkedInText,
+          page_title: document.title || undefined,
+          company: extractCompany(),
+          job_title: extractJobTitle(),
+          metadata_lines: linkedInStructured.metadataLines,
+          used_readability: false
+        }
+      }
+    }
+  }
+
+  if (accentureContainer) {
+    const accentureStructured = collectStructuredContent(accentureContainer)
+    const accentureText = buildJDText(
+      accentureStructured.metadataLines,
+      accentureContainer.innerText || "",
+      accentureStructured.bodyBlocks
+    )
+
+    debug("detector", "JD extraction candidate", {
+      url: window.location.href,
+      hostname,
+      page_hint: pageHint,
+      root: accentureContainer.id ? `#${accentureContainer.id}` : accentureContainer.className || accentureContainer.tagName,
+      text_length: accentureText.length
+    })
+
+    if (accentureText.trim().length >= 120) {
+      return {
+        text: accentureText,
+        page_title: document.title || undefined,
+        company: extractCompany(),
+        job_title: extractJobTitle(),
+        metadata_lines: accentureStructured.metadataLines,
+        used_readability: false
+      }
+    }
+  }
 
   // Try Mozilla Readability first
   const clone = document.cloneNode(true) as Document
   pruneForReadability(clone)
   const sourceRoot =
-    (clone.body.querySelector(MAIN_CONTENT_SELECTOR) as HTMLElement | null) || clone.body
+    (isLinkedInJobsPage ? getLinkedInJDContainer(clone.body) : null) ||
+    (isAccentureCareersPage ? getAccentureJDContainer(clone.body) : null) ||
+    getPreferredJDContainer(clone.body) ||
+    clone.body
   const structured = collectStructuredContent(sourceRoot)
   const article = new Readability(clone).parse()
 
@@ -233,7 +351,10 @@ function extractJD(): { text: string; page_title?: string; company?: string; job
   }
 
   // Fallback: manual selector-based extraction
-  const mainEl = body.querySelector(MAIN_CONTENT_SELECTOR) as HTMLElement | null
+  const mainEl =
+    (isLinkedInJobsPage ? getLinkedInJDContainer(body) : null) ||
+    accentureContainer ||
+    getPreferredJDContainer(body)
 
   const container = mainEl || body
   const fallbackStructured = collectStructuredContent(container)
@@ -242,6 +363,26 @@ function extractJD(): { text: string; page_title?: string; company?: string; job
     container.innerText || "",
     fallbackStructured.bodyBlocks
   )
+
+  if (isAccentureCareersPage && trimmed.trim().length < 120 && accentureContainer) {
+    const accentureStructured = collectStructuredContent(accentureContainer)
+    const accentureText = buildJDText(
+      accentureStructured.metadataLines,
+      accentureContainer.innerText || "",
+      accentureStructured.bodyBlocks
+    )
+
+    if (accentureText.trim()) {
+      return {
+        text: accentureText,
+        page_title: document.title || undefined,
+        company: extractCompany(),
+        job_title: extractJobTitle(),
+        metadata_lines: accentureStructured.metadataLines,
+        used_readability: false
+      }
+    }
+  }
 
   return {
     text: trimmed,
@@ -255,6 +396,8 @@ function extractJD(): { text: string; page_title?: string; company?: string; job
 
 function extractCompany(): string | undefined {
   const selectors = [
+    ".job-details-jobs-unified-top-card__company-name a",
+    ".jobs-unified-top-card__company-name a",
     "[data-company]",
     ".company-name",
     ".employer-name",
@@ -273,6 +416,8 @@ function extractCompany(): string | undefined {
 
 function extractJobTitle(): string | undefined {
   const selectors = [
+    ".job-details-jobs-unified-top-card__job-title h1",
+    ".jobs-unified-top-card__job-title h1",
     "h1.job-title",
     "h1.posting-headline",
     ".job-title h1",
@@ -300,6 +445,18 @@ const GENERIC_PLACEHOLDER_RE =
 const AI_OPTION_SKIP_THRESHOLD = 10
 const PHONE_FIELD_RE = /(phone|mobile|tel|whatsapp|contact[-_ ]?number)/i
 const SELECT_LIKE_PLACEHOLDER_RE = /^select an option/i
+const SECURITY_VERIFICATION_RE =
+  /(just a moment|performing security verification|verify you are human|verify you are not a bot|checking your browser|cloudflare)/i
+
+type ExtractionContext = {
+  fields: FormField[]
+  diagnostics: ExtractFormDiagnostics
+}
+
+type AutofillFieldOutcome = {
+  result: AutofillResultItem
+  strategy: string
+}
 
 function looksLikeOptionBlob(text: string): boolean {
   const normalized = normalizeInlineText(text)
@@ -378,8 +535,74 @@ function dedupeOptions(options: Array<FormFieldOption | null | undefined>): Form
   return deduped
 }
 
+function normalizeDedupeToken(value: string | undefined): string {
+  return normalizeInlineText(value || "").toLowerCase()
+}
+
+function buildFieldDedupeKey(field: FormField): string {
+  const normalizedLabel = normalizeDedupeToken(field.label)
+  const normalizedType = normalizeDedupeToken(field.type)
+  const normalizedInputType = normalizeDedupeToken(field.input_type)
+  const normalizedName = normalizeDedupeToken(field.name)
+
+  if (normalizedName) {
+    return `${normalizedType}::${normalizedInputType}::${normalizedLabel}::name:${normalizedName}`
+  }
+
+  const normalizedFieldId = normalizeDedupeToken(field.field_id)
+  if (normalizedFieldId && !normalizedFieldId.startsWith("field-")) {
+    return `${normalizedType}::${normalizedInputType}::${normalizedLabel}::field:${normalizedFieldId}`
+  }
+
+  return `${normalizedType}::${normalizedInputType}::${normalizedLabel}`
+}
+
+function pickRicherField(existing: FormField, candidate: FormField): FormField {
+  const existingScore =
+    (existing.options?.length || 0) +
+    (existing.required ? 2 : 0) +
+    (existing.selector ? 1 : 0) +
+    (existing.placeholder ? 1 : 0)
+  const candidateScore =
+    (candidate.options?.length || 0) +
+    (candidate.required ? 2 : 0) +
+    (candidate.selector ? 1 : 0) +
+    (candidate.placeholder ? 1 : 0)
+
+  return candidateScore > existingScore ? candidate : existing
+}
+
+function dedupeExtractedFields(fields: FormField[]): FormField[] {
+  const seen = new Map<string, FormField>()
+
+  for (const field of fields) {
+    const key = buildFieldDedupeKey(field)
+    const existing = seen.get(key)
+
+    if (!existing) {
+      seen.set(key, field)
+      continue
+    }
+
+    seen.set(key, pickRicherField(existing, field))
+  }
+
+  return Array.from(seen.values())
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+function detectSecurityVerificationState(): string | null {
+  const bodyText = normalizeInlineText(document.body?.innerText || "")
+  const titleText = normalizeInlineText(document.title || "")
+  const combined = `${titleText} ${bodyText}`.trim()
+
+  if (!combined) return null
+  if (!SECURITY_VERIFICATION_RE.test(combined)) return null
+
+  return "This page is still behind security verification. Finish the check in the page, wait for the real form to load, then scan again."
 }
 
 function getUniqueAttributeSelector(el: HTMLElement): string | null {
@@ -495,10 +718,10 @@ function findComboboxBackingInput(el: HTMLInputElement): HTMLInputElement | null
   return null
 }
 
-function getComboboxOptionNodes(el: HTMLInputElement): HTMLElement[] {
+function getListboxOptionNodes(trigger: HTMLElement): HTMLElement[] {
   const controlledIds = [
-    el.getAttribute("aria-controls") || "",
-    el.getAttribute("aria-owns") || ""
+    trigger.getAttribute("aria-controls") || "",
+    trigger.getAttribute("aria-owns") || ""
   ].filter(Boolean)
 
   for (const id of controlledIds) {
@@ -522,14 +745,14 @@ function getComboboxOptionNodes(el: HTMLInputElement): HTMLElement[] {
     .filter((node) => isVisibleElement(node))
 }
 
-async function collectComboboxOptions(el: HTMLInputElement): Promise<FormFieldOption[]> {
-  el.focus()
-  el.click()
-  el.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))
+async function collectListboxOptions(trigger: HTMLElement): Promise<FormFieldOption[]> {
+  trigger.focus()
+  trigger.click()
+  trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))
 
   for (const waitMs of [80, 180, 320]) {
     await delay(waitMs)
-    const nodes = getComboboxOptionNodes(el)
+    const nodes = getListboxOptionNodes(trigger)
     const options = dedupeOptions(
       nodes.map((node) => buildOption(node.textContent || "", node.getAttribute("data-value"), node))
     )
@@ -537,27 +760,199 @@ async function collectComboboxOptions(el: HTMLInputElement): Promise<FormFieldOp
       .filter((option) => !/^(select an option|no options|loading)$/i.test(option.label))
 
     if (options.length > 0) {
-      el.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+      trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
       return options
     }
   }
 
-  el.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+  trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
   return []
 }
 
-async function extractFormFields(): Promise<FormField[]> {
+async function collectComboboxOptions(el: HTMLInputElement): Promise<FormFieldOption[]> {
+  return collectListboxOptions(el)
+}
+
+function getVisibleLinkedInEasyApplyModal(): HTMLElement | null {
+  if (getPageHint() !== "linkedin") return null
+
+  const selectors = [
+    ".jobs-easy-apply-modal[role='dialog']",
+    "[data-test-modal-id='easy-apply-modal'] .jobs-easy-apply-modal",
+    "[data-test-modal-id='easy-apply-modal'] [role='dialog']",
+    "#artdeco-modal-outlet .jobs-easy-apply-modal",
+    "#artdeco-modal-outlet [role='dialog']"
+  ]
+
+  for (const selector of selectors) {
+    const candidates = Array.from(document.querySelectorAll<HTMLElement>(selector))
+      .filter((node) => isVisibleElement(node))
+    if (candidates.length > 0) {
+      return candidates[candidates.length - 1] || null
+    }
+  }
+
+  return null
+}
+
+function getLinkedInEasyApplyStage(modalRoot: HTMLElement | null = getVisibleLinkedInEasyApplyModal()): string | undefined {
+  if (!modalRoot) return undefined
+
+  const selectors = [
+    ".artdeco-modal__header h2",
+    ".jobs-easy-apply-content__title",
+    ".jobs-easy-apply-content__step-title",
+    ".jobs-easy-apply-content__subtitle",
+    "[data-test-easy-apply-modal-title]"
+  ]
+
+  for (const selector of selectors) {
+    const text = normalizeInlineText((modalRoot.querySelector(selector) as HTMLElement | null)?.innerText || "")
+    if (text && text.length <= 160) return text
+  }
+
+  return undefined
+}
+
+function findLinkedInFieldContainer(el: HTMLElement): HTMLElement | null {
+  return (
+    el.closest("[data-test-form-element]") ||
+    el.closest(".jobs-easy-apply-form-section__grouping") ||
+    el.closest(".jobs-easy-apply-form-section__question") ||
+    el.closest(".fb-dash-form-element") ||
+    el.closest(".artdeco-text-input")
+  ) as HTMLElement | null
+}
+
+function isUsefulLinkedInLabelCandidate(text: string): boolean {
+  if (!text) return false
+  if (text.length < 2 || text.length > 220) return false
+  if (/^(required|optional|select an option|choose an option|loading)$/i.test(text)) return false
+  if (looksLikeOptionBlob(text) && text.length > 120) return false
+  return true
+}
+
+function findLinkedInFieldLabel(el: HTMLElement): string {
+  const container = findLinkedInFieldContainer(el)
+  if (!container) return ""
+
+  const selectors = [
+    "label",
+    "legend",
+    ".fb-dash-form-element__label-title",
+    ".fb-dash-form-element__label",
+    ".jobs-easy-apply-form-section__grouping label",
+    ".artdeco-text-input--label",
+    "[data-test-form-element-label]"
+  ]
+
+  for (const selector of selectors) {
+    const nodes = Array.from(container.querySelectorAll<HTMLElement>(selector))
+    for (const node of nodes) {
+      const text = cleanText(node)
+      if (isUsefulLinkedInLabelCandidate(text)) return text
+    }
+  }
+
+  for (const child of Array.from(container.children)) {
+    const text = cleanText(child)
+    if (isUsefulLinkedInLabelCandidate(text)) return text
+  }
+
+  return ""
+}
+
+function countMeaningfulFields(fields: FormField[]): number {
+  return fields.filter((field) => {
+    const label = normalizeInlineText(field.label || "")
+    if (!label) return false
+    if (/^(cari|search|select language)$/i.test(label)) return false
+    if (label.length < 3) return false
+    return true
+  }).length
+}
+
+async function extractLinkedInSelectLikeFields(root: ParentNode, existingFields: FormField[]): Promise<FormField[]> {
+  const triggers = Array.from(
+    root.querySelectorAll<HTMLElement>("button[aria-haspopup='listbox'], button[role='combobox'], [role='combobox']")
+  ).filter((node) => isVisibleElement(node))
+
+  const existingKeys = new Set(
+    existingFields.map((field) => `${field.selector || ""}::${field.field_id || ""}::${field.label || ""}`)
+  )
+  const extracted: FormField[] = []
+
+  for (const trigger of triggers) {
+    const rawLabel = findLabel(trigger)
+    if (!rawLabel) continue
+
+    const selector = buildElementSelector(trigger)
+    const fieldId =
+      trigger.id ||
+      trigger.getAttribute("aria-controls") ||
+      trigger.getAttribute("data-test-form-element-id") ||
+      `linkedin-trigger-${extracted.length}`
+    const dedupeKey = `${selector}::${fieldId}::${normalizeInlineText(rawLabel)}`
+    if (existingKeys.has(dedupeKey)) continue
+
+    const sanitized = sanitizeFieldLabel(trigger, fieldId, "combobox", rawLabel)
+    if (!sanitized.label) continue
+
+    const field: FormField = {
+      field_id: fieldId,
+      label: sanitized.label,
+      name: trigger.getAttribute("name") || "",
+      type: "combobox",
+      required:
+        trigger.getAttribute("aria-required") === "true" ||
+        /required/i.test(trigger.getAttribute("aria-label") || "") ||
+        /required/i.test(findLinkedInFieldContainer(trigger)?.innerText || ""),
+      selector,
+      input_type: undefined
+    }
+
+    if (sanitized.aiSkipReason) {
+      field.ai_skip_reason = sanitized.aiSkipReason
+      field.ai_skip_kind = sanitized.aiSkipKind
+    }
+
+    field.options = await collectListboxOptions(trigger)
+    if (!field.options.length) {
+      field.ai_skip_reason = "LinkedIn dropdown options could not be extracted; complete manually"
+      field.ai_skip_kind = "unsupported-combobox"
+    } else if ((field.options.length || 0) > AI_OPTION_SKIP_THRESHOLD && !field.ai_skip_reason) {
+      field.ai_skip_reason = `Too many options (${field.options.length}) for one AI pass`
+      field.ai_skip_kind = "oversized-options"
+    }
+
+    extracted.push(field)
+    existingKeys.add(dedupeKey)
+  }
+
+  return extracted
+}
+
+async function extractFormFieldsFromRoot(root: ParentNode): Promise<FormField[]> {
   const fields: FormField[] = []
   const seen = new Set<string>()
   const seenRadioNames = new Set<string>()
 
-  const inputs = document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+  const inputs = root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
     "input, textarea, select"
   )
 
   for (const el of inputs) {
     if (el instanceof HTMLInputElement && SKIP_TYPES.has(el.type)) continue
-    if (!el.offsetParent && el.type !== "hidden") continue
+    if (el.getAttribute("aria-hidden") === "true") continue
+    if (el.hasAttribute("disabled")) continue
+    if (
+      el instanceof HTMLTextAreaElement &&
+      el.hasAttribute("readonly") &&
+      el.tabIndex === -1
+    ) {
+      continue
+    }
+    if (!el.offsetParent && el.getClientRects().length === 0 && el.type !== "hidden" && el.type !== "file") continue
 
     // Deduplicate radios by name (they share a name but have unique ids)
     if (el instanceof HTMLInputElement && el.type === "radio" && el.name) {
@@ -619,14 +1014,12 @@ async function extractFormFields(): Promise<FormField[]> {
     }
 
     if (el instanceof HTMLInputElement && (el.type === "radio" || el.type === "checkbox")) {
-      // Find the group question from a parent container
-      const groupQuestion = findGroupLabel(el)
-      if (groupQuestion) {
-        field.label = groupQuestion
-      }
-
       if (el.type === "radio") {
-        const radios = document.querySelectorAll<HTMLInputElement>(`input[name="${el.name}"]`)
+        const groupQuestion = findGroupLabel(el)
+        if (groupQuestion) {
+          field.label = groupQuestion
+        }
+        const radios = root.querySelectorAll<HTMLInputElement>(`input[name="${CSS.escape(el.name)}"]`)
         field.options = dedupeOptions(Array.from(radios).map(r => {
           const radioLabel = findLabel(r)
           return buildOption(radioLabel || r.value, r.value, r)
@@ -639,6 +1032,10 @@ async function extractFormFields(): Promise<FormField[]> {
         for (let i = 0; i < 6 && container; i++) {
           const checkboxes = container.querySelectorAll<HTMLInputElement>("input[type='checkbox']")
           if (checkboxes.length > 1) {
+            const groupQuestion = findGroupLabel(el)
+            if (groupQuestion) {
+              field.label = groupQuestion
+            }
             field.options = dedupeOptions(Array.from(checkboxes).map(cb => {
               const cbLabel = findLabel(cb)
               return buildOption(cbLabel || cb.value, cb.value, cb)
@@ -672,7 +1069,107 @@ async function extractFormFields(): Promise<FormField[]> {
     fields.push(field)
   }
 
-  return fields
+  if (getPageHint() === "linkedin") {
+    fields.push(...await extractLinkedInSelectLikeFields(root, fields))
+  }
+
+  return dedupeExtractedFields(fields)
+}
+
+function buildFieldTypeCounts(fields: FormField[]): Record<string, number> {
+  return fields.reduce<Record<string, number>>((acc, field) => {
+    acc[field.type] = (acc[field.type] || 0) + 1
+    return acc
+  }, {})
+}
+
+function buildExtractFormDiagnostics(
+  fields: FormField[],
+  extractionRoot: ExtractFormDiagnostics["extraction_root"],
+  modalDetected: boolean,
+  modalRetryUsed: boolean
+): ExtractFormDiagnostics {
+  const modalRoot = modalDetected ? getVisibleLinkedInEasyApplyModal() : null
+  return {
+    hostname: window.location.hostname,
+    title: document.title || "",
+    page_hint: getPageHint(),
+    page_stage: getLinkedInEasyApplyStage(modalRoot),
+    extraction_root: extractionRoot,
+    modal_detected: modalDetected,
+    modal_retry_used: modalRetryUsed || undefined,
+    field_count: fields.length,
+    meaningful_field_count: countMeaningfulFields(fields),
+    field_types: buildFieldTypeCounts(fields)
+  }
+}
+
+async function extractFormFields(): Promise<ExtractionContext> {
+  const pageHint = getPageHint()
+
+  if (pageHint !== "linkedin") {
+    const fields = await extractFormFieldsFromRoot(document)
+    return {
+      fields,
+      diagnostics: buildExtractFormDiagnostics(fields, "document", false, false)
+    }
+  }
+
+  const modalRoot = getVisibleLinkedInEasyApplyModal()
+  if (!modalRoot) {
+    debug("detector", "LinkedIn extraction falling back to full document because no Easy Apply modal was visible", {
+      url: window.location.href,
+      hostname: window.location.hostname
+    })
+    const fields = await extractFormFieldsFromRoot(document)
+    return {
+      fields,
+      diagnostics: buildExtractFormDiagnostics(fields, "document", false, false)
+    }
+  }
+
+  let modalFields = await extractFormFieldsFromRoot(modalRoot)
+  let meaningfulFieldCount = countMeaningfulFields(modalFields)
+  let modalRetryUsed = false
+
+  if (meaningfulFieldCount < 2) {
+    modalRetryUsed = true
+    debug("detector", "LinkedIn Easy Apply modal detected but yielded too few meaningful fields on first pass; retrying", {
+      url: window.location.href,
+      hostname: window.location.hostname,
+      modal_field_count: modalFields.length,
+      meaningful_field_count: meaningfulFieldCount
+    })
+    await delay(180)
+    const retriedModalRoot = getVisibleLinkedInEasyApplyModal() || modalRoot
+    modalFields = await extractFormFieldsFromRoot(retriedModalRoot)
+    meaningfulFieldCount = countMeaningfulFields(modalFields)
+  }
+
+  if (meaningfulFieldCount >= 2) {
+    debug("detector", "LinkedIn Easy Apply modal-first extraction succeeded", {
+      url: window.location.href,
+      hostname: window.location.hostname,
+      modal_field_count: modalFields.length,
+      meaningful_field_count: meaningfulFieldCount
+    })
+    return {
+      fields: modalFields,
+      diagnostics: buildExtractFormDiagnostics(modalFields, "linkedin-easy-apply-modal", true, modalRetryUsed)
+    }
+  }
+
+  debug("detector", "LinkedIn Easy Apply modal-first extraction did not find enough meaningful fields; falling back to full document", {
+    url: window.location.href,
+    hostname: window.location.hostname,
+    modal_field_count: modalFields.length,
+    meaningful_field_count: meaningfulFieldCount
+  })
+  const fields = await extractFormFieldsFromRoot(document)
+  return {
+    fields,
+    diagnostics: buildExtractFormDiagnostics(fields, "document", true, modalRetryUsed)
+  }
 }
 
 /** Get clean text from an element, stripping SVGs and form controls */
@@ -682,7 +1179,83 @@ function cleanText(el: Element): string {
   return normalizeInlineText(clone.textContent || "")
 }
 
+function getCandidateLabelText(el: Element | null): string {
+  if (!el) return ""
+  if (
+    el instanceof HTMLElement &&
+    el.tagName !== "LABEL" &&
+    el.tagName !== "LEGEND" &&
+    el.querySelector("button, [role='button'], [role='tab'], [role='option']")
+  ) {
+    return ""
+  }
+  const text = cleanText(el)
+  if (!text) return ""
+  if (text.length > 320) return ""
+  if (/^(rp|idr|usd|sgd|eur|gbp|jpy|aud|cad|\*)$/i.test(text)) return ""
+  if (!/[A-Za-z]/.test(text) && !/[^\u0000-\u007f]/.test(text)) return ""
+  return text
+}
+
+function scoreLabelCandidate(text: string): number {
+  const normalized = normalizeInlineText(text)
+  if (!normalized) return -1
+  if (/^(required|optional|select|search|choose|loading)$/i.test(normalized)) return -1
+  if (/^(rp|idr|usd|sgd|eur|gbp|jpy|aud|cad|\*)$/i.test(normalized)) return -1
+  if (looksLikeOptionBlob(normalized)) return -1
+
+  let score = 0
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length
+
+  if (wordCount >= 2) score += 2
+  if (normalized.length >= 12) score += 2
+  if (normalized.endsWith("?")) score += 3
+  if (normalized.includes("*")) score += 1
+  if (wordCount === 1 && normalized.length <= 5) score -= 2
+  if (normalized.length > 220) score -= 2
+
+  return score
+}
+
+function findNearbyContainerLabel(el: HTMLElement): string {
+  let container = el.parentElement
+  let bestLabel = ""
+  let bestScore = 0
+
+  for (let depth = 0; depth < 10 && container; depth += 1) {
+    const prev = container.previousElementSibling
+    if (prev && ["LABEL", "SPAN", "P", "DIV"].includes(prev.tagName)) {
+      const text = getCandidateLabelText(prev)
+      const score = scoreLabelCandidate(text)
+      if (score > bestScore) {
+        bestLabel = text
+        bestScore = score
+      }
+    }
+
+    for (const child of Array.from(container.children)) {
+      if (child.contains(el)) break
+      if (["LABEL", "SPAN", "P", "DIV"].includes(child.tagName)) {
+        const text = getCandidateLabelText(child)
+        const score = scoreLabelCandidate(text)
+        if (score > bestScore) {
+          bestLabel = text
+          bestScore = score
+        }
+      }
+    }
+
+    if (bestScore >= 5) return bestLabel
+    container = container.parentElement
+  }
+
+  return bestLabel
+}
+
 function findLabel(el: HTMLElement): string {
+  const linkedInLabel = getPageHint() === "linkedin" ? findLinkedInFieldLabel(el) : ""
+  if (linkedInLabel) return linkedInLabel
+
   if (el.id) {
     const label = document.querySelector(`label[for="${CSS.escape(el.id)}"]`)
     if (label) {
@@ -706,10 +1279,12 @@ function findLabel(el: HTMLElement): string {
     if (text) return text
   }
   const prev = el.previousElementSibling
-  if (prev && (prev.tagName === "LABEL" || prev.tagName === "SPAN" || prev.tagName === "P")) {
+  if (prev && (prev.tagName === "LABEL" || prev.tagName === "SPAN" || prev.tagName === "P" || prev.tagName === "DIV")) {
     const text = cleanText(prev)
     if (text) return text
   }
+  const nearbyContainerLabel = findNearbyContainerLabel(el)
+  if (nearbyContainerLabel) return nearbyContainerLabel
   if ("placeholder" in el && (el as HTMLInputElement).placeholder) {
     const placeholder = (el as HTMLInputElement).placeholder.trim()
     if (placeholder && !GENERIC_PLACEHOLDER_RE.test(placeholder)) {
@@ -851,6 +1426,31 @@ function dispatchValueEvents(el: HTMLElement) {
   el.dispatchEvent(new Event("change", { bubbles: true }))
 }
 
+async function commitTextLikeValue(
+  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+  expectedValue: string,
+  pageHint?: string
+): Promise<boolean> {
+  if ("focus" in element) {
+    element.focus()
+  }
+
+  dispatchValueEvents(element)
+
+  if (verifyTextValue(element, expectedValue)) {
+    return true
+  }
+
+  if (pageHint === "jobstreet") {
+    element.dispatchEvent(new Event("blur", { bubbles: true }))
+    element.dispatchEvent(new Event("focusout", { bubbles: true }))
+    await delay(90)
+    return verifyTextValue(element, expectedValue)
+  }
+
+  return false
+}
+
 function verifyTextValue(
   element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
   expectedValue: string
@@ -979,12 +1579,23 @@ function findInputOptionForField(
 
 function verifyComboboxSelection(
   field: FormField,
-  input: HTMLInputElement,
+  trigger: HTMLElement,
   option: FormFieldOption
 ): boolean {
-  const visibleValue = normalizeInlineText(input.value)
-  if (visibleValue && optionMatches({ label: visibleValue, value: visibleValue }, option.label || option.value || "")) {
-    return true
+  if (trigger instanceof HTMLInputElement) {
+    const visibleValue = normalizeInlineText(trigger.value)
+    if (visibleValue && optionMatches({ label: visibleValue, value: visibleValue }, option.label || option.value || "")) {
+      return true
+    }
+  } else {
+    const triggerText = normalizeInlineText(trigger.innerText || trigger.textContent || "")
+    const triggerLabel = normalizeInlineText(trigger.getAttribute("aria-label") || "")
+    if (
+      (triggerText && optionMatches({ label: triggerText, value: triggerText }, option.label || option.value || "")) ||
+      (triggerLabel && optionMatches({ label: triggerLabel, value: triggerLabel }, option.label || option.value || ""))
+    ) {
+      return true
+    }
   }
 
   if (field.name) {
@@ -1013,74 +1624,104 @@ function interpretBooleanAnswer(answer: string): boolean | null {
   return null
 }
 
-async function autofillField(field: FormField, answer: string): Promise<AutofillResultItem> {
+async function autofillField(field: FormField, answer: string): Promise<AutofillFieldOutcome> {
   const trimmedAnswer = answer.trim()
   const resultBase = {
     field_id: field.field_id,
     label: field.label
   } satisfies Pick<AutofillResultItem, "field_id" | "label">
+  const pageHint = getPageHint()
 
   if (!trimmedAnswer) {
-    return { ...resultBase, status: "skipped", reason: "No answer to fill" }
+    return { result: { ...resultBase, status: "skipped", reason: "No answer to fill" }, strategy: "no-answer" }
   }
 
   const element = resolveFieldElement(field)
   if (!element) {
-    return { ...resultBase, status: "failed", reason: "Field not found on page" }
+    return { result: { ...resultBase, status: "failed", reason: "Field not found on page" }, strategy: "element-missing" }
   }
 
   try {
     if (field.type === "text") {
       if (!(element instanceof HTMLInputElement)) {
-        return { ...resultBase, status: "failed", reason: "Target is not a text input" }
+        return { result: { ...resultBase, status: "failed", reason: "Target is not a text input" }, strategy: "text-input-mismatch" }
       }
 
       setNativeValue(element, trimmedAnswer)
-      dispatchValueEvents(element)
-      if (!verifyTextValue(element, trimmedAnswer)) {
-        return { ...resultBase, status: "failed", reason: "Input value did not stick after autofill" }
+      if (!(await commitTextLikeValue(element, trimmedAnswer, pageHint))) {
+        return {
+          result: {
+            ...resultBase,
+            status: "failed",
+            reason:
+              pageHint === "jobstreet"
+                ? "JobStreet controlled input rejected scripted value"
+                : pageHint === "linkedin"
+                  ? "LinkedIn controlled input rejected scripted value"
+                  : "Input value did not stick after autofill"
+          },
+          strategy: "text-native-set"
+        }
       }
-      return { ...resultBase, status: "filled" }
+      return { result: { ...resultBase, status: "filled" }, strategy: "text-native-set" }
     }
 
     if (field.type === "textarea") {
       if (!(element instanceof HTMLTextAreaElement)) {
-        return { ...resultBase, status: "failed", reason: "Target is not a textarea" }
+        return { result: { ...resultBase, status: "failed", reason: "Target is not a textarea" }, strategy: "textarea-mismatch" }
       }
       setNativeValue(element, trimmedAnswer)
-      dispatchValueEvents(element)
-      if (!verifyTextValue(element, trimmedAnswer)) {
-        return { ...resultBase, status: "failed", reason: "Textarea value did not stick after autofill" }
+      if (!(await commitTextLikeValue(element, trimmedAnswer, pageHint))) {
+        return {
+          result: {
+            ...resultBase,
+            status: "failed",
+            reason:
+              pageHint === "jobstreet"
+                ? "JobStreet controlled textarea rejected scripted value"
+                : pageHint === "linkedin"
+                  ? "LinkedIn controlled textarea rejected scripted value"
+                  : "Textarea value did not stick after autofill"
+          },
+          strategy: "textarea-native-set"
+        }
       }
-      return { ...resultBase, status: "filled" }
+      return { result: { ...resultBase, status: "filled" }, strategy: "textarea-native-set" }
     }
 
     if (field.type === "select") {
       if (!(element instanceof HTMLSelectElement)) {
-        return { ...resultBase, status: "failed", reason: "Target is not a select" }
+        return { result: { ...resultBase, status: "failed", reason: "Target is not a select" }, strategy: "select-mismatch" }
       }
 
       const option = findMatchingOption(field, trimmedAnswer)
       if (!option) {
-        return { ...resultBase, status: "skipped", reason: "No matching select option" }
+        return { result: { ...resultBase, status: "skipped", reason: "No matching select option" }, strategy: "select-no-match" }
       }
 
       element.value = option.value || option.label
-      dispatchValueEvents(element)
-      if (!verifyTextValue(element, option.value || option.label)) {
-        return { ...resultBase, status: "failed", reason: "Select value did not stick after autofill" }
+      if (!(await commitTextLikeValue(element, option.value || option.label, pageHint))) {
+        return {
+          result: {
+            ...resultBase,
+            status: "failed",
+            reason:
+              pageHint === "jobstreet"
+                ? "JobStreet select rejected scripted value"
+                : pageHint === "linkedin"
+                  ? "LinkedIn select rejected scripted value"
+                  : "Select value did not stick after autofill"
+          },
+          strategy: "native-select"
+        }
       }
-      return { ...resultBase, status: "filled" }
+      return { result: { ...resultBase, status: "filled" }, strategy: "native-select" }
     }
 
     if (field.type === "combobox") {
-      if (!(element instanceof HTMLInputElement)) {
-        return { ...resultBase, status: "failed", reason: "Target is not a combobox input" }
-      }
-
       const option = findMatchingOption(field, trimmedAnswer)
       if (!option) {
-        return { ...resultBase, status: "skipped", reason: "No matching combobox option" }
+        return { result: { ...resultBase, status: "skipped", reason: "No matching combobox option" }, strategy: "combobox-no-match" }
       }
 
       element.focus()
@@ -1094,11 +1735,11 @@ async function autofillField(field: FormField, answer: string): Promise<Autofill
           optionNode.click()
           await delay(80)
           if (verifyComboboxSelection(field, element, option)) {
-            return { ...resultBase, status: "filled" }
+            return { result: { ...resultBase, status: "filled" }, strategy: "combobox-selector-click" }
           }
         }
 
-        const liveOptions = getComboboxOptionNodes(element)
+        const liveOptions = getListboxOptionNodes(element)
         const liveMatch = liveOptions.find((node) =>
           optionMatches(
             {
@@ -1113,24 +1754,34 @@ async function autofillField(field: FormField, answer: string): Promise<Autofill
           liveMatch.click()
           await delay(80)
           if (verifyComboboxSelection(field, element, option)) {
-            return { ...resultBase, status: "filled" }
+            return { result: { ...resultBase, status: "filled" }, strategy: "combobox-live-match" }
           }
         }
       }
 
       element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
-      return { ...resultBase, status: "failed", reason: "Combobox option did not stick after autofill" }
+      return {
+        result: {
+          ...resultBase,
+          status: "failed",
+          reason:
+            pageHint === "linkedin"
+              ? "LinkedIn dropdown selection did not stick after autofill"
+              : "Combobox option did not stick after autofill"
+        },
+        strategy: "combobox-selection-failed"
+      }
     }
 
     if (field.type === "radio") {
       const option = findMatchingOption(field, trimmedAnswer)
       if (!option) {
-        return { ...resultBase, status: "skipped", reason: "No matching radio option" }
+        return { result: { ...resultBase, status: "skipped", reason: "No matching radio option" }, strategy: "radio-no-match" }
       }
 
       const radio = findInputOptionForField(field, option, "radio")
       if (!radio) {
-        return { ...resultBase, status: "failed", reason: "Radio option not found on page" }
+        return { result: { ...resultBase, status: "failed", reason: "Radio option not found on page" }, strategy: "radio-missing" }
       }
 
       clickAssociatedControl(radio)
@@ -1138,9 +1789,9 @@ async function autofillField(field: FormField, answer: string): Promise<Autofill
         setCheckedState(radio, true)
       }
       if (!radio.checked) {
-        return { ...resultBase, status: "failed", reason: "Radio option did not stay selected" }
+        return { result: { ...resultBase, status: "failed", reason: "Radio option did not stay selected" }, strategy: "radio-select" }
       }
-      return { ...resultBase, status: "filled" }
+      return { result: { ...resultBase, status: "filled" }, strategy: "radio-select" }
     }
 
     if (field.type === "checkbox") {
@@ -1150,7 +1801,7 @@ async function autofillField(field: FormField, answer: string): Promise<Autofill
       if (options.length <= 1 && checkbox) {
         const boolAnswer = interpretBooleanAnswer(trimmedAnswer)
         if (boolAnswer === null) {
-          return { ...resultBase, status: "skipped", reason: "Checkbox answer is not yes/no" }
+          return { result: { ...resultBase, status: "skipped", reason: "Checkbox answer is not yes/no" }, strategy: "checkbox-bool-invalid" }
         }
         if (checkbox.checked !== boolAnswer) {
           clickAssociatedControl(checkbox)
@@ -1159,14 +1810,14 @@ async function autofillField(field: FormField, answer: string): Promise<Autofill
           setCheckedState(checkbox, boolAnswer)
         }
         if (checkbox.checked !== boolAnswer) {
-          return { ...resultBase, status: "failed", reason: "Checkbox state did not stick after autofill" }
+          return { result: { ...resultBase, status: "failed", reason: "Checkbox state did not stick after autofill" }, strategy: "checkbox-bool" }
         }
-        return { ...resultBase, status: "filled" }
+        return { result: { ...resultBase, status: "filled" }, strategy: "checkbox-bool" }
       }
 
       const selections = splitSelections(trimmedAnswer)
       if (!selections.length) {
-        return { ...resultBase, status: "skipped", reason: "No checkbox selections found" }
+        return { result: { ...resultBase, status: "skipped", reason: "No checkbox selections found" }, strategy: "checkbox-group-empty" }
       }
 
       let filled = 0
@@ -1186,18 +1837,27 @@ async function autofillField(field: FormField, answer: string): Promise<Autofill
       }
 
       if (!filled) {
-        return { ...resultBase, status: "skipped", reason: "No matching checkbox options" }
+        return { result: { ...resultBase, status: "skipped", reason: "No matching checkbox options" }, strategy: "checkbox-group-no-match" }
       }
 
-      return { ...resultBase, status: "filled", reason: filled < selections.length ? "Some selections could not be matched" : undefined }
+      return {
+        result: { ...resultBase, status: "filled", reason: filled < selections.length ? "Some selections could not be matched" : undefined },
+        strategy: "checkbox-group"
+      }
     }
 
-    return { ...resultBase, status: "skipped", reason: `Unsupported field type: ${field.type}` }
+    return {
+      result: { ...resultBase, status: "skipped", reason: `Unsupported field type: ${field.type}` },
+      strategy: "unsupported-field-type"
+    }
   } catch (error) {
     return {
-      ...resultBase,
-      status: "failed",
-      reason: error instanceof Error ? error.message : "Unknown autofill error"
+      result: {
+        ...resultBase,
+        status: "failed",
+        reason: error instanceof Error ? error.message : "Unknown autofill error"
+      },
+      strategy: "exception"
     }
   }
 }
@@ -1213,62 +1873,124 @@ function base64ToUint8Array(base64Data: string): Uint8Array {
 
 function uploadResumeToFileField(
   field: FormField,
-  resumeFile: AutofillResumeFilePayload | undefined
-): AutofillResultItem {
+  filePayload: AutofillFilePayload | undefined
+): AutofillFieldOutcome {
   const resultBase = {
     field_id: field.field_id,
     label: field.label
   } satisfies Pick<AutofillResultItem, "field_id" | "label">
 
-  if (!resumeFile) {
-    return { ...resultBase, status: "skipped", reason: "No tailored resume file available" }
+  if (!filePayload) {
+    return { result: { ...resultBase, status: "skipped", reason: "No file selected for upload" }, strategy: "file-no-payload" }
   }
 
   const element = resolveFieldElement(field)
   if (!(element instanceof HTMLInputElement) || element.type !== "file") {
-    return { ...resultBase, status: "failed", reason: "Target is not a standard file input" }
+    return { result: { ...resultBase, status: "failed", reason: "Target is not a standard file input" }, strategy: "file-input-missing" }
   }
 
   try {
     const dataTransfer = new DataTransfer()
     const file = new File(
-      [base64ToUint8Array(resumeFile.base64_data)],
-      resumeFile.filename,
-      { type: resumeFile.mime_type }
+      [base64ToUint8Array(filePayload.base64_data)],
+      filePayload.filename,
+      { type: filePayload.mime_type }
     )
     dataTransfer.items.add(file)
     element.files = dataTransfer.files
     dispatchValueEvents(element)
-    return { ...resultBase, status: "filled" }
+    return { result: { ...resultBase, status: "filled" }, strategy: "file-input-upload" }
   } catch (error) {
     return {
-      ...resultBase,
-      status: "failed",
-      reason: error instanceof Error ? error.message : "Could not attach resume file"
+      result: {
+        ...resultBase,
+        status: "failed",
+        reason: error instanceof Error ? error.message : "Could not attach resume file"
+      },
+      strategy: "file-upload-exception"
     }
   }
 }
 
 async function autofillForm(
   fields: FormField[],
-  answers: AutofillAnswerInput[],
-  resumeFile?: AutofillResumeFilePayload
-): Promise<AutofillResultItem[]> {
+  answers: AutofillAnswerInput[]
+): Promise<{ results: AutofillResultItem[]; strategyCounts: Record<string, number> }> {
   const answerMap = new Map(answers.map((answer) => [answer.field_id, answer]))
   const results: AutofillResultItem[] = []
+  const strategyCounts: Record<string, number> = {}
 
   for (const field of fields) {
+    let outcome: AutofillFieldOutcome | null = null
     if (field.type === "file") {
-      results.push(uploadResumeToFileField(field, resumeFile))
-      continue
+      const answer = answerMap.get(field.field_id)
+      outcome = uploadResumeToFileField(field, answer?.file_upload || undefined)
+    } else {
+      const answer = answerMap.get(field.field_id)
+      if (!answer) continue
+      outcome = await autofillField(field, answer.answer)
     }
 
-    const answer = answerMap.get(field.field_id)
-    if (!answer) continue
-    results.push(await autofillField(field, answer.answer))
+    if (!outcome) continue
+    results.push(outcome.result)
+    strategyCounts[outcome.strategy] = (strategyCounts[outcome.strategy] || 0) + 1
+    debug("detector", "AUTOFILL_FIELD result", {
+      field_id: field.field_id,
+      label: field.label,
+      field_type: field.type,
+      strategy: outcome.strategy,
+      status: outcome.result.status,
+      reason: outcome.result.reason
+    })
   }
 
-  return results
+  return { results, strategyCounts }
+}
+
+function getPageHint(): string | undefined {
+  const hostname = window.location.hostname.toLowerCase()
+  if (hostname.includes("linkedin")) return "linkedin"
+  if (hostname.includes("jobstreet")) return "jobstreet"
+  if (hostname.includes("greenhouse")) return "greenhouse"
+  if (hostname.includes("lever")) return "lever"
+  if (hostname.includes("ashby")) return "ashby"
+  if (hostname.includes("workday")) return "workday"
+  return undefined
+}
+
+function buildAutofillDiagnostics(
+  fields: FormField[],
+  results: AutofillResultItem[],
+  strategyCounts: Record<string, number>
+): AutofillDiagnostics {
+  const filled = results.filter((item) => item.status === "filled").length
+  const skipped = results.filter((item) => item.status === "skipped").length
+  const failed = results.filter((item) => item.status === "failed").length
+  const failureReasons = Array.from(
+    new Set(
+      results
+        .filter((item) => item.status === "failed" && item.reason)
+        .map((item) => item.reason as string)
+    )
+  ).slice(0, 8)
+
+  const modalRoot = getVisibleLinkedInEasyApplyModal()
+
+  return {
+    hostname: window.location.hostname,
+    title: document.title || "",
+    page_hint: getPageHint(),
+    page_stage: getLinkedInEasyApplyStage(modalRoot),
+    extraction_root: modalRoot ? "linkedin-easy-apply-modal" : "document",
+    modal_detected: Boolean(modalRoot),
+    attempted_fields: results.length,
+    file_fields: fields.filter((field) => field.type === "file").length,
+    filled,
+    skipped,
+    failed,
+    failure_reasons: failureReasons,
+    strategy_counts: strategyCounts
+  }
 }
 
 // ── Message Handler ──────────────────────────────────────────────────────
@@ -1287,11 +2009,41 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     }
 
     if (msg.type === "EXTRACT_FORM") {
-      const fields = await extractFormFields()
+      debug("detector", "EXTRACT_FORM requested", {
+        url: window.location.href,
+        hostname: window.location.hostname,
+        title: document.title || ""
+      })
+      const securityVerificationError = detectSecurityVerificationState()
+      if (securityVerificationError) {
+        debugError("detector", "EXTRACT_FORM blocked by verification state", securityVerificationError)
+        sendResponse({
+          success: false,
+          url: window.location.href,
+          fields: [],
+          error: securityVerificationError
+        })
+        return
+      }
+
+      const extraction = await extractFormFields()
+      debug("detector", "EXTRACT_FORM completed", {
+        url: window.location.href,
+        hostname: window.location.hostname,
+        diagnostics: extraction.diagnostics,
+        extracted_fields_preview: extraction.fields.slice(0, 12).map((field) => ({
+          label: field.label,
+          type: field.type,
+          required: field.required,
+          option_count: field.options?.length || 0,
+          selector: field.selector
+        }))
+      })
       sendResponse({
         success: true,
         url: window.location.href,
-        fields
+        fields: extraction.fields,
+        diagnostics: extraction.diagnostics
       })
       return
     }
@@ -1299,15 +2051,23 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === "AUTOFILL_FORM") {
       const fields = Array.isArray(msg.fields) ? msg.fields as FormField[] : []
       const answers = Array.isArray(msg.answers) ? msg.answers as AutofillAnswerInput[] : []
-      const resumeFile =
-        msg.resume_file && typeof msg.resume_file === "object"
-          ? msg.resume_file as AutofillResumeFilePayload
-          : undefined
-      const results = await autofillForm(fields, answers, resumeFile)
+      debug("detector", "AUTOFILL_FORM requested", {
+        url: window.location.href,
+        hostname: window.location.hostname,
+        title: document.title || "",
+        page_hint: getPageHint(),
+        field_count: fields.length,
+        answer_count: answers.length,
+        file_field_count: fields.filter((field) => field.type === "file").length
+      })
+      const { results, strategyCounts } = await autofillForm(fields, answers)
+      const diagnostics = buildAutofillDiagnostics(fields, results, strategyCounts)
+      debug("detector", "AUTOFILL_FORM completed", diagnostics)
       sendResponse({
         success: true,
         url: window.location.href,
-        results
+        results,
+        diagnostics
       })
       return
     }
@@ -1318,6 +2078,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       error: "Unsupported content-script message"
     })
   })().catch((error) => {
+    debugError("detector", "Content script request failed", {
+      url: window.location.href,
+      hostname: window.location.hostname,
+      title: document.title || "",
+      page_hint: getPageHint(),
+      error: error instanceof Error ? error.message : "Content script autofill failed"
+    })
     sendResponse({
       success: false,
       url: window.location.href,

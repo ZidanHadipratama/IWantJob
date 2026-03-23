@@ -45,6 +45,7 @@ MOCK_JOB = {
         "employment_type": "full-time",
     },
     "applied_at": None,
+    "cover_letter_text": None,
     "notes": None,
     "created_at": "2026-01-01T00:00:00Z",
 }
@@ -175,6 +176,28 @@ async def test_log_job_update_sanitizes_notes():
 
 
 @pytest.mark.asyncio
+async def test_log_job_update_sanitizes_cover_letter_text():
+    mock_db = make_mock_db()
+    mock_db.update_job.return_value = {**MOCK_JOB, "cover_letter_text": "Hello team"}
+    with patch("app.routers.jobs.DBService", return_value=mock_db):
+        response = await log_job(
+            body=LogJobRequest(
+                job_id=UUID(JOB_ID),
+                company="Acme Corp",
+                title="Engineer",
+                cover_letter_text="<p>Hello</p> team",
+            ),
+            client=MagicMock(),
+            user_id=USER_ID,
+        )
+
+    assert response.status_code == 200
+    call_args = mock_db.update_job.call_args[0][1]
+    assert call_args["cover_letter_text"] == "Hello team"
+    assert json.loads(response.body)["cover_letter_text"] == "Hello team"
+
+
+@pytest.mark.asyncio
 async def test_log_job_update_accepts_employment_type():
     mock_db = make_mock_db()
     mock_db.update_job.return_value = {**MOCK_JOB, "employment_type": "contract"}
@@ -275,6 +298,7 @@ async def test_save_qa_upserts_and_returns_saved_pairs():
 @pytest.mark.asyncio
 async def test_save_application_draft_persists_job_resume_and_qa():
     mock_db = make_mock_db()
+    mock_db.create_job.return_value = {**MOCK_JOB, "cover_letter_text": "Thanks for your consideration."}
     with patch("app.routers.resume.DBService", return_value=mock_db):
         response = await save_application_draft(
             body=SaveApplicationDraftRequest(
@@ -291,6 +315,7 @@ async def test_save_application_draft_persists_job_resume_and_qa():
                     "work_mode": "remote",
                     "employment_type": "full-time",
                 },
+                cover_letter_text="Thanks for your consideration.",
                 tailored_resume_json={
                     "contact": {"name": "Alice"},
                     "sections": [],
@@ -313,11 +338,13 @@ async def test_save_application_draft_persists_job_resume_and_qa():
     assert body["job"]["id"] == JOB_ID
     assert body["resume_saved"] is True
     assert len(body["qa_pairs"]) == 1
+    assert body["job"]["cover_letter_text"] == "Thanks for your consideration."
     assert body["job"]["structured_job_description"]["work_mode"] == "remote"
     mock_db.create_job.assert_called_once()
     mock_db.save_tailored_resume.assert_called_once()
     mock_db.upsert_qa_pairs.assert_called_once()
     created_job_payload = mock_db.create_job.call_args[0][0]
+    assert created_job_payload["cover_letter_text"] == "Thanks for your consideration."
     assert created_job_payload["structured_job_description"]["work_mode"] == "remote"
 
 
@@ -417,6 +444,48 @@ async def test_fill_form_prompt_uses_not_provided_when_persona_missing():
     assert "Persona Context:" in prompt_call
     assert "Not provided" in prompt_call
     assert "If a shorter, plainer answer is stronger, prefer that over a longer polished one." in prompt_call
+
+
+@pytest.mark.asyncio
+async def test_fill_form_prompt_includes_prior_answers_context():
+    mock_ai = MagicMock()
+    mock_ai.json_completion = AsyncMock(return_value=[])
+    mock_db = MagicMock()
+    mock_db.get_user.return_value = None
+
+    with patch("app.routers.form.AIService", return_value=mock_ai), patch(
+        "app.routers.form.DBService", return_value=mock_db
+    ):
+        await fill_form(
+            body=FillFormRequest(
+                form_fields=[
+                    {
+                        "field_id": "sponsorship_followup",
+                        "label": "Will you now or in the future require sponsorship?",
+                        "type": "radio",
+                        "options": [{"label": "Yes"}, {"label": "No"}],
+                    }
+                ],
+                resume_text="Backend engineer with application workflow experience.",
+                job_description="Remote backend role",
+                prior_answers=[
+                    {
+                        "field_id": "work_auth",
+                        "question": "Are you authorized to work in the United States?",
+                        "answer": "Yes",
+                        "field_type": "radio",
+                    }
+                ],
+            ),
+            ai_config=MagicMock(provider="openai", api_key="sk-test", model="gpt-4o-mini"),
+            client=MagicMock(),
+            user_id=USER_ID,
+        )
+
+    prompt_call = mock_ai.json_completion.await_args.kwargs["user_message"]
+    assert "Previously answered (do not contradict):" in prompt_call
+    assert "Are you authorized to work in the United States? -> Yes" in prompt_call
+    assert "Do not contradict any previously answered question" in prompt_call
 
 
 @pytest.mark.asyncio

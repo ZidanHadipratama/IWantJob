@@ -55,6 +55,7 @@ export interface JobDetail {
   url?: string
   job_description?: string
   structured_job_description?: StructuredJobDescription
+  cover_letter_text?: string
   status: string
   job_type?: string
   employment_type?: string
@@ -75,6 +76,7 @@ export interface JobMutation {
   url?: string
   job_description?: string
   structured_job_description?: StructuredJobDescription
+  cover_letter_text?: string
   status?: string
   job_type?: string
   employment_type?: string
@@ -93,6 +95,7 @@ export interface JobMutationResult {
   location?: string
   salary_range?: string
   structured_job_description?: StructuredJobDescription
+  cover_letter_text?: string
   notes?: string
   created_at: string
 }
@@ -130,6 +133,7 @@ export interface ApiClient {
     job_description: string
     resume_text?: string
     resume_json?: ResumeJson
+    output_language?: string
     company?: string
     title?: string
     url?: string
@@ -146,6 +150,16 @@ export interface ApiClient {
     job_id?: string
   }>
   generatePdf(resumeJson: ResumeJson): Promise<Blob>
+  generateCoverLetter(req: {
+    job_description: string
+    resume_text?: string
+    resume_json?: ResumeJson
+    persona_text?: string
+    output_language?: string
+    company?: string
+    title?: string
+    structured_job_description?: StructuredJobDescription
+  }): Promise<{ cover_letter_text: string }>
   fillForm(req: {
     form_fields: FormField[]
     resume_text?: string
@@ -154,6 +168,12 @@ export interface ApiClient {
     job_id?: string
     job_description?: string
     structured_job_description?: StructuredJobDescription
+    prior_answers?: Array<{
+      field_id?: string
+      question: string
+      answer: string
+      field_type?: string
+    }>
   }): Promise<{ answers: AutofillAnswerInput[]; job_id?: string; qa_saved: boolean }>
   saveApplicationDraft(req: {
     job_id?: string
@@ -167,6 +187,7 @@ export interface ApiClient {
     location?: string
     salary_range?: string
     structured_job_description?: StructuredJobDescription
+    cover_letter_text?: string
     notes?: string
     tailored_resume_json: ResumeJson
     qa_pairs?: QAPairItem[]
@@ -183,6 +204,7 @@ export interface ApiClient {
     location?: string
     salary_range?: string
     structured_job_description?: StructuredJobDescription
+    cover_letter_text?: string
     notes?: string
   }): Promise<JobMutationResult>
   getJob(jobId: string): Promise<JobDetail>
@@ -459,6 +481,24 @@ export async function createApiClient(): Promise<ApiClient> {
         throw new Error(body?.detail || `Server returned ${res.status}`)
       }
       return await res.blob()
+    },
+
+    async generateCoverLetter(req) {
+      const model = resolveModel(aiConfig, "tailor")
+      const res = await fetch(`${backendUrl}/generate-cover-letter`, {
+        method: "POST",
+        headers: {
+          ...baseHeaders(),
+          ...aiHeaders(model),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(req)
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.detail || `Server returned ${res.status}`)
+      }
+      return await res.json()
     },
 
     async logJob(req) {

@@ -1,21 +1,21 @@
 import { useState, useEffect } from "react"
-import { ClipboardList, FileText, LayoutGrid } from "lucide-react"
+import { ClipboardList, FileText, ScrollText } from "lucide-react"
 
 import "./style.css"
 
 import FillForm from "./components/sidepanel/FillForm"
+import CoverLetter from "./components/sidepanel/CoverLetter"
 import Resume from "./components/sidepanel/Resume"
-import TrackerTable from "./components/sidepanel/TrackerTable"
 import BrandMark from "./components/BrandMark"
 import { debug } from "~lib/debug"
 import { getStorage, normalizeActiveJobContext, setStorage, type ActiveJobContext } from "~lib/storage"
 
-type Tab = "fill-form" | "resume" | "tracker"
+type Tab = "fill-form" | "resume" | "cover-letter"
 
 const tabs: { id: Tab; label: string; icon: typeof ClipboardList }[] = [
   { id: "resume", label: "Resume", icon: FileText },
+  { id: "cover-letter", label: "Cover Letter", icon: ScrollText },
   { id: "fill-form", label: "Fill Form", icon: ClipboardList },
-  { id: "tracker", label: "Tracker", icon: LayoutGrid },
 ]
 
 function SidePanel() {
@@ -32,7 +32,7 @@ function SidePanel() {
     ]).then(([value, savedTab]) => {
       if (!mounted) return
       setContext(normalizeActiveJobContext(value))
-      if (savedTab === "resume" || savedTab === "fill-form" || savedTab === "tracker") {
+      if (savedTab === "resume" || savedTab === "cover-letter" || savedTab === "fill-form") {
         setActiveTab(savedTab)
       } else if (savedTab) {
         void setStorage("sidepanel_active_tab", "resume")
@@ -49,7 +49,7 @@ function SidePanel() {
       }
       if (changes.sidepanel_active_tab) {
         const nextTab = changes.sidepanel_active_tab.newValue
-        if (nextTab === "resume" || nextTab === "fill-form" || nextTab === "tracker") {
+        if (nextTab === "resume" || nextTab === "cover-letter" || nextTab === "fill-form") {
           setActiveTab(nextTab)
         } else {
           setActiveTab("resume")
@@ -116,7 +116,7 @@ function SidePanel() {
       <main className="flex-1 overflow-auto p-4">
         {activeTab === "fill-form" && <FillForm />}
         {activeTab === "resume" && <Resume />}
-        {activeTab === "tracker" && <TrackerTable />}
+        {activeTab === "cover-letter" && <CoverLetter />}
       </main>
     </div>
   )

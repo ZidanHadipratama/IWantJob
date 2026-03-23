@@ -14,6 +14,8 @@ from supabase import Client
 
 from app.dependencies import AIConfig, get_ai_config, get_supabase_client, get_user_id
 from app.models.schemas import (
+    GenerateCoverLetterRequest,
+    GenerateCoverLetterResponse,
     JobInfo,
     LogJobRequest,
     LogJobResponse,
@@ -83,6 +85,28 @@ def _format_structured_jd_summary(structured_jd: StructuredJobDescription) -> st
     return "\n".join(lines)
 
 
+def _build_cover_letter_prompt(
+    body: GenerateCoverLetterRequest,
+    resume_text: str,
+    structured_jd: Optional[StructuredJobDescription],
+) -> str:
+    prompt_template = _load_prompt("cover_letter.txt")
+    replacements = {
+        "{company}": _safe_prompt_value(body.company),
+        "{title}": _safe_prompt_value(body.title),
+        "{persona_text}": body.persona_text or "Not provided",
+        "{output_language}": _safe_prompt_value(body.output_language, "English"),
+        "{job_description}": redact_free_text(body.job_description),
+        "{structured_job_summary}": _format_structured_jd_summary(structured_jd) if structured_jd else "Not provided",
+        "{resume}": resume_text,
+    }
+
+    prompt = prompt_template
+    for placeholder, value in replacements.items():
+        prompt = prompt.replace(placeholder, value)
+    return prompt
+
+
 def _format_prompt(
     body: TailorResumeRequest,
     resume_text: str,
@@ -101,6 +125,7 @@ def _format_prompt(
         "{detected_title}": _safe_prompt_value(body.title),
         "{page_excerpt}": _safe_prompt_value(body.page_excerpt),
         "{metadata_lines}": metadata_lines,
+        "{output_language}": _safe_prompt_value(body.output_language, "English"),
         "{structured_job_summary}": _format_structured_jd_summary(structured_jd),
         "{ranked_overlap_brief}": ranked_overlap_brief,
         "{ranked_entry_ordering_brief}": ranked_entry_ordering_brief,
@@ -341,6 +366,7 @@ async def tailor_resume(
             "page_title": body.page_title,
             "detected_company": body.company,
             "detected_title": body.title,
+            "output_language": body.output_language or "English",
             "page_excerpt": _safe_prompt_value(body.page_excerpt),
             "metadata_lines": body.metadata_lines,
             "job_description_preview": redact_free_text(body.job_description),
@@ -450,6 +476,41 @@ async def tailor_resume(
     )
 
 
+@router.post("/generate-cover-letter", response_model=GenerateCoverLetterResponse)
+async def generate_cover_letter(
+    body: GenerateCoverLetterRequest,
+    ai_config: AIConfig = Depends(get_ai_config),
+):
+    source_resume_json = body.resume_json
+    resume_text = body.resume_text or ""
+    if source_resume_json:
+        resume_text = resume_json_to_prompt_text(source_resume_json)
+
+    if not resume_text.strip():
+        raise HTTPException(status_code=400, detail="A resume is required to generate a cover letter")
+
+    structured_jd = body.structured_job_description
+    if not structured_jd and body.job_description:
+        heuristic_jd = extract_structured_jd_heuristics(body.job_description)
+        structured_jd = heuristic_jd
+
+    prompt = _build_cover_letter_prompt(body, resume_text, structured_jd)
+    ai = AIService(ai_config)
+    try:
+        cover_letter_text = await ai.completion(
+            system_prompt="You write concise, credible cover letters tailored to real job applications.",
+            user_message=prompt,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Cover letter generation failed: {exc}") from exc
+
+    cover_letter_text = cover_letter_text.strip()
+    if not cover_letter_text:
+        raise HTTPException(status_code=502, detail="Cover letter generation returned empty text")
+
+    return GenerateCoverLetterResponse(cover_letter_text=cover_letter_text)
+
+
 @router.post("/save-application-draft", response_model=SaveApplicationDraftResponse)
 async def save_application_draft(
     body: SaveApplicationDraftRequest,
@@ -472,6 +533,7 @@ async def save_application_draft(
         location=body.location,
         salary_range=body.salary_range,
         structured_job_description=body.structured_job_description,
+        cover_letter_text=body.cover_letter_text,
         notes=body.notes,
     )
     sanitized = _sanitize_log_job_payload(job_request)

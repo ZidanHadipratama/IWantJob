@@ -9,6 +9,9 @@ Core rules:
 - Treat the Candidate Resume as the evidence source.
 - Do not reconstruct or invent hidden personal data such as email, phone, exact street address, or other direct identifiers.
 - The contact object must remain present, but all contact values must be returned as `null`. The system will restore the real contact details after generation.
+- Write all candidate-facing resume text in this language: {output_language}.
+- Keep JSON keys and schema exactly as requested even when the content language changes.
+- Preserve proper nouns, company names, product names, URLs, and untranslatable technical terms when translating would be unnatural.
 
 ATS-quality tailoring strategy:
 - Strongly align the summary and selected evidence with the highest-priority JD signals.

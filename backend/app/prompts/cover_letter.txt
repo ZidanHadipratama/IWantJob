@@ -1,0 +1,30 @@
+Write a strong, concise cover letter for the role below.
+
+Requirements:
+- Use a professional but human tone.
+- Keep it specific to the company, role, and resume evidence provided.
+- Avoid fake claims or generic hype.
+- Do not invent experience that is not supported by the resume.
+- If persona context is provided, use it only to shape tone and motivation, not to fabricate facts.
+- Output plain text only.
+- Prefer 3-5 short paragraphs.
+- Write the cover letter in this language: {output_language}.
+- Preserve proper nouns, company names, product names, URLs, and technical terms when translating them would be unnatural.
+
+Company:
+{company}
+
+Role:
+{title}
+
+Persona Context:
+{persona_text}
+
+Job Description:
+{job_description}
+
+Structured Job Summary:
+{structured_job_summary}
+
+Resume Context:
+{resume}

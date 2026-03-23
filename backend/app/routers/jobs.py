@@ -66,6 +66,7 @@ def _sanitize_log_job_payload(body: LogJobRequest) -> dict:
         "location": location,
         "salary_range": salary_range,
         "structured_job_description": structured_job_description,
+        "cover_letter_text": _strip_html(body.cover_letter_text),
         "notes": _strip_html(body.notes),
     }
 
@@ -82,6 +83,7 @@ def _sanitize_log_job_payload(body: LogJobRequest) -> dict:
         "location",
         "salary_range",
         "structured_job_description",
+        "cover_letter_text",
         "notes",
     ):
         if field in body.model_fields_set:

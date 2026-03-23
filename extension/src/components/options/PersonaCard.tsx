@@ -3,6 +3,22 @@ import { CheckCircle, Copy, HelpCircle } from "lucide-react"
 
 import { getStorage, setStorage } from "~lib/storage"
 
+const PERSONA_WORD_LIMIT = 150
+
+function splitWords(value: string) {
+  const trimmed = value.trim()
+  return trimmed ? trimmed.split(/\s+/) : []
+}
+
+function clampPersonaWords(value: string, limit: number) {
+  const words = splitWords(value)
+  if (words.length <= limit) {
+    return value
+  }
+
+  return words.slice(0, limit).join(" ")
+}
+
 const PERSONA_PROMPT = `Help me create a reusable job application persona for an AI job application assistant.
 
 Base it on our past chats and/or the answers I provide below. Write practical freeform text I can paste into another tool.
@@ -21,7 +37,7 @@ Important rules:
 - Do not invent job history, achievements, credentials, or technical skills that are not explicitly supported.
 - Do not exaggerate experience.
 - Keep it grounded, useful, and written in first person.
-- Make it concise enough to paste into a settings field, but rich enough to help answer application questions.
+- Keep it within 150 words total while still being rich enough to help answer application questions.
 
 If you need more context first, ask me a few targeted questions before writing the final persona.`
 
@@ -64,6 +80,8 @@ export function PersonaCard() {
       : "Need help creating one?"
   }, [helperOpen])
 
+  const wordCount = useMemo(() => splitWords(personaText).length, [personaText])
+
   return (
     <div className="card">
       <div className="flex items-start justify-between gap-3 mb-4">
@@ -87,6 +105,11 @@ export function PersonaCard() {
           <label htmlFor="persona-text" className="label mb-0">
             Persona Text
           </label>
+          <span className="text-xs text-text-muted">
+            {wordCount} / {PERSONA_WORD_LIMIT} words
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-3 mb-2">
           <button
             type="button"
             onClick={() => setHelperOpen((value) => !value)}
@@ -99,13 +122,13 @@ export function PersonaCard() {
         <textarea
           id="persona-text"
           value={personaText}
-          onChange={(e) => handleChange(e.target.value)}
+          onChange={(e) => handleChange(clampPersonaWords(e.target.value, PERSONA_WORD_LIMIT))}
           placeholder="Paste your persona here. Example themes: principles, motivations, communication style, working style, strengths, and personal narrative."
           rows={10}
           className="input-field min-h-[220px] resize-y"
         />
         <p className="text-xs text-text-muted mt-2">
-          This is used as optional narrative context for application answers. You can leave it empty.
+          This is used as optional narrative context for application answers. You can leave it empty, but if you use it, keep it concise and within {PERSONA_WORD_LIMIT} words.
         </p>
       </div>
 

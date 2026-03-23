@@ -33,6 +33,7 @@ Answer quality rules:
 - For short factual fields, keep answers concise.
 - For longer questions, prefer direct, readable paragraphs over inflated generic prose.
 - When the field offers explicit options, choose the best supported option rather than inventing a new phrasing.
+- Do not contradict any previously answered question unless the current form field clearly requires a more specific compatible answer.
 
 Return ONLY a valid JSON array. No preamble, no explanation, no markdown fences.
 
@@ -56,6 +57,9 @@ Structured Job Summary:
 
 Job Description:
 {job_description}
+
+Previously answered (do not contradict):
+{prior_answers}
 
 Form fields:
 {form_fields}

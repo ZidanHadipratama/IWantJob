@@ -109,6 +109,16 @@ export interface ExtractFormResponse {
   url: string
   fields: FormField[]
   frame_id?: number
+  diagnostics?: ExtractFormDiagnostics
+  error?: string
+}
+
+export type AutofillFileSource = "local-file" | "tailored-resume" | "cover-letter"
+
+export interface AutofillFilePayload {
+  filename: string
+  mime_type: string
+  base64_data: string
 }
 
 export interface AutofillAnswerInput {
@@ -116,13 +126,13 @@ export interface AutofillAnswerInput {
   label: string
   answer: string
   field_type: string
+  ai_selected?: boolean
+  removed?: boolean
+  file_upload_source?: AutofillFileSource
+  file_upload?: AutofillFilePayload | null
 }
 
-export interface AutofillResumeFilePayload {
-  filename: string
-  mime_type: string
-  base64_data: string
-}
+export type AutofillResumeFilePayload = AutofillFilePayload
 
 export interface AutofillResultItem {
   field_id: string
@@ -131,10 +141,40 @@ export interface AutofillResultItem {
   reason?: string
 }
 
+export interface AutofillDiagnostics {
+  hostname: string
+  title: string
+  page_hint?: string
+  page_stage?: string
+  extraction_root?: "document" | "linkedin-easy-apply-modal"
+  modal_detected?: boolean
+  attempted_fields: number
+  file_fields: number
+  filled: number
+  skipped: number
+  failed: number
+  failure_reasons: string[]
+  strategy_counts?: Record<string, number>
+}
+
+export interface ExtractFormDiagnostics {
+  hostname: string
+  title: string
+  page_hint?: string
+  page_stage?: string
+  extraction_root: "document" | "linkedin-easy-apply-modal"
+  modal_detected: boolean
+  modal_retry_used?: boolean
+  field_count: number
+  meaningful_field_count: number
+  field_types: Record<string, number>
+}
+
 export interface AutofillFormResponse {
   success: boolean
   url: string
   results?: AutofillResultItem[]
   frame_id?: number
+  diagnostics?: AutofillDiagnostics
   error?: string
 }

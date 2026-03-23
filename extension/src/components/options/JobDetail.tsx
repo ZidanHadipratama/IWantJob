@@ -356,6 +356,11 @@ export default function JobDetail({ jobId, onBack }: JobDetailProps) {
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesMessage, setNotesMessage] = useState<string | null>(null)
   const [notesTone, setNotesTone] = useState<"neutral" | "success" | "error">("neutral")
+  const [editingCoverLetter, setEditingCoverLetter] = useState(false)
+  const [coverLetterDraft, setCoverLetterDraft] = useState("")
+  const [savingCoverLetter, setSavingCoverLetter] = useState(false)
+  const [coverLetterMessage, setCoverLetterMessage] = useState<string | null>(null)
+  const [coverLetterTone, setCoverLetterTone] = useState<"neutral" | "success" | "error">("neutral")
   const [editingQaKey, setEditingQaKey] = useState<string | null>(null)
   const [qaDraft, setQaDraft] = useState("")
   const [savingQaKey, setSavingQaKey] = useState<string | null>(null)
@@ -374,7 +379,9 @@ export default function JobDetail({ jobId, onBack }: JobDetailProps) {
       setJob(data)
       setStatusDraft(data.status || "saved")
       setNotesDraft(data.notes || "")
+      setCoverLetterDraft(data.cover_letter_text || "")
       setEditingNotes(false)
+      setEditingCoverLetter(false)
       setEditingQaKey(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load job details")
@@ -492,6 +499,57 @@ export default function JobDetail({ jobId, onBack }: JobDetailProps) {
     }
   }
 
+  async function handleSaveCoverLetter() {
+    if (!job) return
+
+    setSavingCoverLetter(true)
+    setCoverLetterMessage(null)
+
+    try {
+      const client = await createApiClient()
+      const updated = await client.updateJob({
+        job_id: job.id,
+        company: job.company,
+        title: job.title,
+        cover_letter_text: coverLetterDraft
+      })
+      setJob((prev) => (prev ? { ...prev, cover_letter_text: updated.cover_letter_text || "" } : prev))
+      setCoverLetterDraft(updated.cover_letter_text || "")
+      setEditingCoverLetter(false)
+      setCoverLetterTone("success")
+      setCoverLetterMessage("Cover letter saved.")
+    } catch (err) {
+      setCoverLetterTone("error")
+      setCoverLetterMessage(err instanceof Error ? err.message : "Failed to save cover letter")
+    } finally {
+      setSavingCoverLetter(false)
+    }
+  }
+
+  async function handleCopyCoverLetter() {
+    if (!coverLetterDraft.trim()) return
+
+    try {
+      await navigator.clipboard.writeText(coverLetterDraft)
+      setCoverLetterTone("success")
+      setCoverLetterMessage("Cover letter copied.")
+    } catch (err) {
+      setCoverLetterTone("error")
+      setCoverLetterMessage(err instanceof Error ? err.message : "Failed to copy cover letter")
+    }
+  }
+
+  function handleDownloadCoverLetter() {
+    if (!coverLetterDraft.trim()) return
+
+    const companyPart = (job?.company || "company").replace(/[^a-z0-9]+/gi, "_")
+    const titlePart = (job?.title || "cover_letter").replace(/[^a-z0-9]+/gi, "_")
+    const blob = new Blob([coverLetterDraft], { type: "text/plain;charset=utf-8" })
+    downloadBlob(blob, `${companyPart}_${titlePart}_cover_letter.txt`)
+    setCoverLetterTone("success")
+    setCoverLetterMessage("Cover letter download started.")
+  }
+
   async function handleDownloadPdf() {
     if (!job) return
 
@@ -571,6 +629,7 @@ export default function JobDetail({ jobId, onBack }: JobDetailProps) {
 
   const statusColor = STATUS_COLORS[job.status] || STATUS_COLORS.saved
   const notesDirty = notesDraft !== (job.notes || "")
+  const coverLetterDirty = coverLetterDraft !== (job.cover_letter_text || "")
   const structuredJobDescription = (job.structured_job_description || null) as StructuredJobDescription | null
 
   return (
@@ -768,6 +827,87 @@ export default function JobDetail({ jobId, onBack }: JobDetailProps) {
             ) : (
               <EmptyMessage message="No form answers are saved for this job yet." />
             )}
+          </SectionCard>
+
+          <SectionCard
+            icon={ScrollText}
+            title="Cover Letter"
+            subtitle="Stored with this job record for reuse, editing, and copy-paste."
+          >
+            <div className="space-y-4">
+              <SaveStateMessage tone={coverLetterTone} message={coverLetterMessage || undefined} />
+              {editingCoverLetter ? (
+                <>
+                  <textarea
+                    value={coverLetterDraft}
+                    onChange={(event) => setCoverLetterDraft(event.target.value)}
+                    placeholder="Write or paste the cover letter you want to keep with this job."
+                    className="input-field min-h-[220px] resize-y"
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-text-muted">
+                      This saves directly onto the tracker job record so you can revisit it later.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setCoverLetterDraft(job.cover_letter_text || "")
+                          setEditingCoverLetter(false)
+                        }}
+                        className="btn-secondary"
+                        disabled={savingCoverLetter}
+                      >
+                        <X className="h-4 w-4" />
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSaveCoverLetter}
+                        className="btn-primary"
+                        disabled={savingCoverLetter || !coverLetterDirty}
+                      >
+                        {savingCoverLetter ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        Save cover letter
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : coverLetterDraft ? (
+                <>
+                  <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-5 text-sm leading-7 text-text whitespace-pre-wrap">
+                    {coverLetterDraft}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-text-muted">
+                      Saved cover letters are useful for copy-paste applications and future tailoring.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button onClick={handleCopyCoverLetter} className="btn-secondary">
+                        <Check className="h-4 w-4" />
+                        Copy
+                      </button>
+                      <button onClick={handleDownloadCoverLetter} className="btn-secondary">
+                        <Download className="h-4 w-4" />
+                        Download .txt
+                      </button>
+                      <button onClick={() => setEditingCoverLetter(true)} className="btn-secondary">
+                        <Pencil className="h-4 w-4" />
+                        Edit cover letter
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <EmptyMessage message="No cover letter is saved for this job yet. Generate one from the Resume tab or add one manually here." />
+                  <div className="flex justify-end">
+                    <button onClick={() => setEditingCoverLetter(true)} className="btn-secondary">
+                      <Pencil className="h-4 w-4" />
+                      Add cover letter
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </SectionCard>
 
           <SectionCard

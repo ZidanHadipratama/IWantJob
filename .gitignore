@@ -2,6 +2,7 @@
 .planning/
 .claude/
 .codex/
+.tmp-codex-config.toml
 tmp/
 extension/tmp/
 AGENTS.md
@@ -26,18 +27,22 @@ extension/tsconfig.tsbuildinfo
 
 # Debug
 debugImage/
+.playwright-mcp/
 *.log
 extension/playwright-report/
 extension/test-results/
 playwright-report/
 test-results/
 resume.tex
+fillform-preview-full.png
+sidepanel-after-declutter.png
+sidepanel-current-all-tabs.png
+*:Zone.Identifier
 
 # Supabase CLI local state
 supabase/.temp/
 
-# Private documentation
-docs/
+# Private design files
 design-system/
 
 # OS

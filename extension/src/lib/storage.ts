@@ -34,7 +34,7 @@ export interface DraftQAPair {
 
 export interface InFlightRequest {
   id: string
-  kind: "tailor_resume" | "generate_answers"
+  kind: "tailor_resume" | "generate_answers" | "generate_cover_letter"
 }
 
 export interface ActiveJobContext {
@@ -43,6 +43,7 @@ export interface ActiveJobContext {
   job_id?: string | null
   job_description: string
   structured_job_description?: StructuredJobDescription | null
+  cover_letter_text?: string
   company: string
   job_title: string
   job_url: string
@@ -58,6 +59,7 @@ export interface ResumeSessionState {
   jobId?: string | null
   jdText: string
   structuredJobDescription?: StructuredJobDescription | null
+  coverLetterText?: string
   company: string
   jobTitle: string
   jobUrl: string
@@ -75,8 +77,25 @@ export interface FillFormSessionState {
   answers: AutofillAnswerInput[]
   fieldCount: number
   frameId?: number | null
+  pageIndex?: number
+  pageKey?: string
+  pageUrl?: string
+  steps?: FillFormStepState[]
+  allQaPairs?: AutofillAnswerInput[]
   includedFlaggedFieldIds?: string[]
   inFlightRequest?: InFlightRequest | null
+}
+
+export interface FillFormStepState {
+  pageIndex: number
+  pageKey: string
+  pageUrl?: string
+  fields: FormField[]
+  answers: AutofillAnswerInput[]
+  retainedAnswers?: AutofillAnswerInput[]
+  fieldCount: number
+  frameId?: number | null
+  includedFlaggedFieldIds?: string[]
 }
 
 export interface StorageSchema {
@@ -84,6 +103,7 @@ export interface StorageSchema {
   db_config: DBConfig
   backend_url: string
   user_id: string
+  output_language: string
   persona_text: string
   base_resume_text: string
   base_resume_json: ResumeJson | null
@@ -92,7 +112,7 @@ export interface StorageSchema {
   resume_session: ResumeSessionState | null
   active_job_context: ActiveJobContext | null
   fillform_session: FillFormSessionState | null
-  sidepanel_active_tab: "resume" | "fill-form" | "tracker"
+  sidepanel_active_tab: "resume" | "cover-letter" | "fill-form" | "tracker"
 }
 
 function asString(value: unknown): string {
@@ -113,6 +133,30 @@ function asAutofillAnswerArray(value: unknown): AutofillAnswerInput[] {
     : []
 }
 
+function asFillFormStepArray(value: unknown): FillFormStepState[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .filter((item): item is Partial<FillFormStepState> => Boolean(item) && typeof item === "object")
+    .map((step, index) => {
+      const pageIndex = typeof step.pageIndex === "number" && step.pageIndex > 0 ? step.pageIndex : index + 1
+      const fields = asFormFieldArray(step.fields)
+      const answers = asAutofillAnswerArray(step.answers)
+
+      return {
+        pageIndex,
+        pageKey: asString(step.pageKey) || `step-${pageIndex}`,
+        pageUrl: asString(step.pageUrl),
+        fields,
+        answers,
+        retainedAnswers: asAutofillAnswerArray(step.retainedAnswers),
+        fieldCount: typeof step.fieldCount === "number" ? step.fieldCount : fields.length,
+        frameId: typeof step.frameId === "number" ? step.frameId : null,
+        includedFlaggedFieldIds: asStringArray(step.includedFlaggedFieldIds)
+      }
+    })
+}
+
 function asResumeJson(value: unknown): ResumeJson | null {
   return value && typeof value === "object" ? (value as ResumeJson) : null
 }
@@ -126,7 +170,7 @@ function asInFlightRequest(value: unknown): InFlightRequest | null {
 
   const request = value as Partial<InFlightRequest>
   const id = asString(request.id)
-  const kind = request.kind === "tailor_resume" || request.kind === "generate_answers"
+  const kind = request.kind === "tailor_resume" || request.kind === "generate_answers" || request.kind === "generate_cover_letter"
     ? request.kind
     : null
 
@@ -149,6 +193,7 @@ export function normalizeResumeSession(raw: unknown): ResumeSessionState | null 
     jobId: typeof session.jobId === "string" ? session.jobId : null,
     jdText,
     structuredJobDescription: asStructuredJobDescription(session.structuredJobDescription),
+    coverLetterText: asString(session.coverLetterText),
     company: asString(session.company),
     jobTitle: asString(session.jobTitle),
     jobUrl: asString(session.jobUrl),
@@ -175,12 +220,36 @@ export function normalizeFillFormSession(raw: unknown): FillFormSessionState | n
   if (phase === "extracted" && fields.length === 0) return null
   if (phase === "answered" && answers.length === 0) return null
 
+  const pageIndex = typeof session.pageIndex === "number" && session.pageIndex > 0 ? session.pageIndex : 1
+  const pageKey = asString(session.pageKey) || `step-${pageIndex}`
+  const pageUrl = asString(session.pageUrl)
+  const currentStep: FillFormStepState = {
+    pageIndex,
+    pageKey,
+    pageUrl,
+    fields,
+    answers,
+    retainedAnswers: [],
+    fieldCount,
+    frameId: typeof session.frameId === "number" ? session.frameId : null,
+    includedFlaggedFieldIds: asStringArray(session.includedFlaggedFieldIds)
+  }
+
+  const rawSteps = asFillFormStepArray(session.steps)
+  const steps = rawSteps.length > 0 ? rawSteps : [currentStep]
+  const allQaPairs = asAutofillAnswerArray(session.allQaPairs)
+
   return {
     phase,
     fields,
     answers,
     fieldCount,
     frameId: typeof session.frameId === "number" ? session.frameId : null,
+    pageIndex,
+    pageKey,
+    pageUrl,
+    steps,
+    allQaPairs: allQaPairs.length > 0 ? allQaPairs : steps.flatMap((step) => step.answers),
     includedFlaggedFieldIds: asStringArray(session.includedFlaggedFieldIds),
     inFlightRequest: asInFlightRequest(session.inFlightRequest)
   }
@@ -218,6 +287,7 @@ export function normalizeActiveJobContext(raw: unknown): ActiveJobContext | null
     job_id: jobId,
     job_description: jobDescription,
     structured_job_description: asStructuredJobDescription(context.structured_job_description),
+    cover_letter_text: asString(context.cover_letter_text),
     company: asString(context.company),
     job_title: asString(context.job_title),
     job_url: asString(context.job_url),

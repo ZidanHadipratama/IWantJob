@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IWantJob — AI-Powered Job Applications</title>
+  <meta name="description" content="Open-source Chrome extension that tailors your resume, fills application forms with AI, and tracks every application. Bring your own AI key or use our managed Pro plan.">
+  <meta name="theme-color" content="#0D9488">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="IWantJob — AI-Powered Job Applications">
+  <meta property="og:description" content="Tailor resumes, fill forms with AI, and track every application. Open source or managed Pro.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="assets/tracker-job-detail.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="../assets/brand/iw-mark.svg">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Tailwind Play CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#0D9488',
+            'primary-light': '#14B8A6',
+            'primary-dark': '#0F766E',
+            secondary: '#14B8A6',
+            accent: '#F97316',
+            'accent-dark': '#EA580C',
+            surface: '#F0FDFA',
+            'text-primary': '#134E4A',
+            'text-muted': '#475569',
+            'card-bg': '#FFFFFF',
+            'card-border': '#E2E8F0',
+          },
+          fontFamily: {
+            heading: ['"Space Grotesk"', 'system-ui', 'sans-serif'],
+            body: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+          },
+          maxWidth: {
+            '7xl': '80rem',
+          },
+        },
+      },
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      font-family: 'Space Grotesk', system-ui, sans-serif;
+    }
+
+    /* Scroll-triggered animations */
+    .fade-up {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+    }
+    .fade-up.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Respect reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      .fade-up {
+        opacity: 1;
+        transform: none;
+        transition: none;
+      }
+    }
+
+    /* FAQ details animation */
+    details summary {
+      list-style: none;
+    }
+    details summary::-webkit-details-marker {
+      display: none;
+    }
+    details[open] summary .faq-chevron {
+      transform: rotate(180deg);
+    }
+    .faq-chevron {
+      transition: transform 0.2s ease-out;
+    }
+
+    /* Focus rings for keyboard accessibility */
+    a:focus-visible, button:focus-visible, summary:focus-visible, details:focus-visible {
+      outline: 2px solid #0D9488;
+      outline-offset: 2px;
+      border-radius: 8px;
+    }
+
+    /* Floating navbar background on scroll */
+    .nav-scrolled {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+
+    /* Gradient text */
+    .gradient-text {
+      background: linear-gradient(135deg, #0D9488 0%, #14B8A6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Bento card hover */
+    .bento-card {
+      transition: transform 0.25s ease-out, box-shadow 0.25s ease-out;
+    }
+    .bento-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(13, 148, 136, 0.1);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .bento-card {
+        transition: none;
+      }
+      .bento-card:hover {
+        transform: none;
+      }
+    }
+
+    /* Pricing card highlight */
+    .pricing-highlight {
+      background: linear-gradient(135deg, #0D9488, #F97316);
+      border-radius: 18px;
+      padding: 2px;
+    }
+    .pricing-highlight-inner {
+      background: #FFFFFF;
+      border-radius: 16px;
+      padding: 2rem;
+    }
+  </style>
+</head>
+
+<body class="bg-white text-text-primary antialiased">
+
+  <!-- Skip to main content (accessibility) -->
+  <a href="#how-it-works" class="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[60] focus:px-4 focus:py-2 focus:rounded-lg focus:bg-primary focus:text-white focus:ring-2 focus:ring-offset-2 focus:ring-primary font-medium text-sm">
+    Skip to main content
+  </a>
+
+  <!-- ============================================= -->
+  <!-- NAVBAR -->
+  <!-- ============================================= -->
+  <nav id="navbar" class="fixed top-4 left-4 right-4 z-50 rounded-2xl px-6 py-3 transition-all duration-300">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <!-- Logo -->
+      <a href="#" class="flex items-center gap-2 cursor-pointer group">
+        <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+          <span class="text-white font-bold text-sm">IW</span>
+        </div>
+        <span class="font-heading font-bold text-xl text-primary">IWantJob</span>
+      </a>
+
+      <!-- Desktop links -->
+      <div class="hidden md:flex items-center gap-8">
+        <a href="#features" class="text-text-muted hover:text-primary transition-colors duration-200 cursor-pointer text-sm font-medium">Features</a>
+        <a href="#how-it-works" class="text-text-muted hover:text-primary transition-colors duration-200 cursor-pointer text-sm font-medium">How It Works</a>
+        <a href="#pricing" class="text-text-muted hover:text-primary transition-colors duration-200 cursor-pointer text-sm font-medium">Pricing</a>
+        <a href="#faq" class="text-text-muted hover:text-primary transition-colors duration-200 cursor-pointer text-sm font-medium">FAQ</a>
+      </div>
+
+      <!-- CTA buttons -->
+      <div class="hidden md:flex items-center gap-3">
+        <a href="https://github.com/ZidanHadipratama/IWantJob" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-card-border text-text-primary hover:bg-surface transition-colors duration-200 cursor-pointer text-sm font-medium">
+          <!-- GitHub icon (Lucide) -->
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+          Install Free
+        </a>
+        <a href="#pricing" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary-dark transition-colors duration-200 cursor-pointer text-sm font-semibold shadow-sm">
+          Get Pro
+        </a>
+      </div>
+
+      <!-- Mobile menu button -->
+      <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-surface transition-colors duration-200 cursor-pointer" aria-label="Toggle navigation menu">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <!-- Mobile menu -->
+    <div id="mobile-menu" class="hidden md:hidden mt-4 pb-4 border-t border-card-border pt-4">
+      <div class="flex flex-col gap-3">
+        <a href="#features" class="text-text-muted hover:text-primary transition-colors duration-200 cursor-pointer text-sm font-medium py-1">Features</a>
+        <a href="#how-it-works" class="text-text-muted hover:text-primary transition-colors duration-200 cursor-pointer text-sm font-medium py-1">How It Works</a>
+        <a href="#pricing" class="text-text-muted hover:text-primary transition-colors duration-200 cursor-pointer text-sm font-medium py-1">Pricing</a>
+        <a href="#faq" class="text-text-muted hover:text-primary transition-colors duration-200 cursor-pointer text-sm font-medium py-1">FAQ</a>
+        <div class="flex flex-col gap-2 mt-2">
+          <a href="https://github.com/ZidanHadipratama/IWantJob" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-card-border text-text-primary hover:bg-surface transition-colors duration-200 cursor-pointer text-sm font-medium">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+            Install Free
+          </a>
+          <a href="#pricing" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-white hover:bg-primary-dark transition-colors duration-200 cursor-pointer text-sm font-semibold">
+            Get Pro
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ============================================= -->
+  <!-- HERO -->
+  <!-- ============================================= -->
+  <section class="pt-32 pb-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-surface to-white">
+    <div class="max-w-7xl mx-auto">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <!-- Left: Copy -->
+        <div class="fade-up">
+          <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
+            Open Source &amp; Free Forever
+          </div>
+          <h1 class="font-heading text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight mb-6">
+            Land your dream job with
+            <span class="gradient-text">AI-powered</span>
+            applications
+          </h1>
+          <p class="text-text-muted text-lg sm:text-xl leading-relaxed mb-8 max-w-xl">
+            Tailor your resume to every role, generate smart form answers, autofill applications, and track everything in one place. Bring your own AI key or let us handle it.
+          </p>
+          <div class="flex flex-wrap gap-4">
+            <a href="https://github.com/ZidanHadipratama/IWantJob" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-white hover:bg-primary-dark transition-colors duration-200 cursor-pointer text-base font-semibold shadow-lg shadow-primary/20">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+              Get Started Free
+            </a>
+            <a href="#pricing" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-primary text-primary hover:bg-primary hover:text-white transition-colors duration-200 cursor-pointer text-base font-semibold">
+              Try Pro
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+            </a>
+          </div>
+          <!-- Trust signals -->
+          <div class="flex items-center gap-6 mt-8 text-text-muted text-sm">
+            <div class="flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
+              Privacy-first
+            </div>
+            <div class="flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              No data collection
+            </div>
+            <div class="flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              Community-driven
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Product screenshot -->
+        <div class="fade-up relative">
+          <div class="relative rounded-2xl overflow-hidden shadow-2xl shadow-primary/10 border border-card-border">
+            <img src="assets/tracker-job-detail.png" alt="IWantJob tracker workspace showing saved job applications with metadata, job description, tailored resume, and saved Q&A" width="1200" height="800" class="w-full h-auto" loading="eager">
+          </div>
+          <!-- Decorative gradient blur -->
+          <div class="absolute -top-8 -right-8 w-64 h-64 bg-secondary/20 rounded-full blur-3xl -z-10" aria-hidden="true"></div>
+          <div class="absolute -bottom-8 -left-8 w-48 h-48 bg-accent/15 rounded-full blur-3xl -z-10" aria-hidden="true"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================= -->
+  <!-- SUPPORTED PROVIDERS -->
+  <!-- ============================================= -->
+  <section class="py-12 px-4 sm:px-6 lg:px-8 border-y border-card-border bg-white">
+    <div class="max-w-7xl mx-auto">
+      <p class="text-center text-text-muted text-sm font-medium mb-6">Works with the AI providers you already use</p>
+      <div class="flex flex-wrap justify-center items-center gap-8 sm:gap-12">
+        <div class="flex items-center gap-2 text-text-muted">
+          <span class="font-heading font-semibold text-lg">OpenAI</span>
+        </div>
+        <div class="flex items-center gap-2 text-text-muted">
+          <span class="font-heading font-semibold text-lg">Anthropic</span>
+        </div>
+        <div class="flex items-center gap-2 text-text-muted">
+          <span class="font-heading font-semibold text-lg">Google Gemini</span>
+        </div>
+        <div class="flex items-center gap-2 text-text-muted">
+          <span class="font-heading font-semibold text-lg">DeepSeek</span>
+        </div>
+        <div class="flex items-center gap-2 text-text-muted">
+          <span class="font-heading font-semibold text-lg">Ollama</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================= -->
+  <!-- HOW IT WORKS -->
+  <!-- ============================================= -->
+  <section id="how-it-works" class="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-16 fade-up">
+        <h2 class="font-heading text-3xl sm:text-4xl font-bold mb-4">How it works</h2>
+        <p class="text-text-muted text-lg max-w-2xl mx-auto">Four steps from job listing to tracked application. No shortcuts on quality — you review everything before it saves.</p>
+      </div>
+
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+        <!-- Step 1 -->
+        <div class="fade-up text-center">
+          <div class="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-5">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
+          </div>
+          <div class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-white text-xs font-bold mb-3">1</div>
+          <h3 class="font-heading font-semibold text-lg mb-2">Extract the JD</h3>
+          <p class="text-text-muted text-sm leading-relaxed">Open any job posting and click Extract. The extension reads the full job description automatically.</p>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="fade-up text-center">
+          <div class="w-14 h-14 rounded-2xl bg-secondary/10 text-secondary flex items-center justify-center mx-auto mb-5">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </div>
+          <div class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-secondary text-white text-xs font-bold mb-3">2</div>
+          <h3 class="font-heading font-semibold text-lg mb-2">Tailor your resume</h3>
+          <p class="text-text-muted text-sm leading-relaxed">AI generates a role-specific resume with match score. Edit inline, download as PDF when ready.</p>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="fade-up text-center">
+          <div class="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-5">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+          </div>
+          <div class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-white text-xs font-bold mb-3">3</div>
+          <h3 class="font-heading font-semibold text-lg mb-2">Fill the form</h3>
+          <p class="text-text-muted text-sm leading-relaxed">AI reads application fields and generates answers. Review, edit, then autofill directly into the page.</p>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="fade-up text-center">
+          <div class="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-5">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+          </div>
+          <div class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-white text-xs font-bold mb-3">4</div>
+          <h3 class="font-heading font-semibold text-lg mb-2">Track everything</h3>
+          <p class="text-text-muted text-sm leading-relaxed">Save approved applications to your tracker. Review JDs, resumes, and Q&A from a full detail workspace.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================= -->
+  <!-- FEATURES (Bento Grid) -->
+  <!-- ============================================= -->
+  <section id="features" class="py-20 px-4 sm:px-6 lg:px-8 bg-surface">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-16 fade-up">
+        <h2 class="font-heading text-3xl sm:text-4xl font-bold mb-4">Everything you need to apply smarter</h2>
+        <p class="text-text-muted text-lg max-w-2xl mx-auto">Not another resume builder. A complete application workflow — from job discovery to tracked submission.</p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <!-- Card 1: Resume Tailoring (large) -->
+        <div class="bento-card bg-card-bg rounded-2xl p-6 border border-card-border lg:col-span-2 fade-up cursor-pointer">
+          <div class="flex flex-col sm:flex-row gap-6">
+            <div class="flex-1">
+              <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <h3 class="font-heading font-semibold text-xl mb-2">AI Resume Tailoring</h3>
+              <p class="text-text-muted text-sm leading-relaxed mb-4">Generates a role-specific resume from your base resume and the extracted JD. Includes a match score, structured JSON preview, and one-click PDF download.</p>
+              <ul class="space-y-2 text-sm text-text-muted">
+                <li class="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Match score per tailored resume</li>
+                <li class="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Inline editing before download</li>
+                <li class="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> PDF generation with clean formatting</li>
+              </ul>
+            </div>
+            <div class="sm:w-56 flex-shrink-0">
+              <img src="assets/sidepanel-resume-draft.png" alt="Resume tailoring sidepanel showing a structured resume draft with match score" class="rounded-xl border border-card-border shadow-sm w-full h-auto" loading="lazy">
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Privacy -->
+        <div class="bento-card bg-card-bg rounded-2xl p-6 border border-card-border fade-up cursor-pointer">
+          <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-xl mb-2">Your data, your control</h3>
+          <p class="text-text-muted text-sm leading-relaxed">No telemetry, no analytics, no logging of your content. Self-hosted with your own Supabase database. API keys stay in your browser.</p>
+        </div>
+
+        <!-- Card 3: Form Fill -->
+        <div class="bento-card bg-card-bg rounded-2xl p-6 border border-card-border fade-up cursor-pointer">
+          <div class="w-10 h-10 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-xl mb-2">Smart form filling</h3>
+          <p class="text-text-muted text-sm leading-relaxed">AI reads form fields and generates context-aware answers. Handles text, select, radio, checkbox, and even iframe-hosted forms. You review before autofill.</p>
+        </div>
+
+        <!-- Card 4: Autofill (large) -->
+        <div class="bento-card bg-card-bg rounded-2xl p-6 border border-card-border lg:col-span-2 fade-up cursor-pointer">
+          <div class="flex flex-col sm:flex-row gap-6">
+            <div class="flex-1">
+              <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+              </div>
+              <h3 class="font-heading font-semibold text-xl mb-2">Browser autofill with reporting</h3>
+              <p class="text-text-muted text-sm leading-relaxed mb-4">After you review and approve answers, autofill writes them directly into the live application form. Every field gets a status report: filled, skipped, or needs manual review.</p>
+              <ul class="space-y-2 text-sm text-text-muted">
+                <li class="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Text, select, radio, checkbox, file upload</li>
+                <li class="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Custom combobox and iframe support</li>
+                <li class="flex items-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg> Per-field status reporting</li>
+              </ul>
+            </div>
+            <div class="sm:w-56 flex-shrink-0">
+              <img src="assets/sidepanel-fill-form-draft.png" alt="Fill Form sidepanel with generated answers ready for review and autofill" class="rounded-xl border border-card-border shadow-sm w-full h-auto" loading="lazy">
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 5: Persona -->
+        <div class="bento-card bg-card-bg rounded-2xl p-6 border border-card-border fade-up cursor-pointer">
+          <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-xl mb-2">Persona context</h3>
+          <p class="text-text-muted text-sm leading-relaxed">Add optional persona details — career goals, communication style, strengths — so AI answers feel authentically yours, not generic.</p>
+        </div>
+
+        <!-- Card 6: Tracker -->
+        <div class="bento-card bg-card-bg rounded-2xl p-6 border border-card-border fade-up cursor-pointer">
+          <div class="w-10 h-10 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-xl mb-2">Application tracker</h3>
+          <p class="text-text-muted text-sm leading-relaxed">Full-width tracker with search, filter, sort, inline status editing, and a detail workspace per application. See your JD, resume, and Q&A in one place.</p>
+        </div>
+
+        <!-- Card 7: Multi-provider -->
+        <div class="bento-card bg-card-bg rounded-2xl p-6 border border-card-border fade-up cursor-pointer">
+          <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="m6.8 15-3.5 2"/><path d="m20.7 7-3.5 2"/><path d="M6.8 9 3.3 7"/><path d="m20.7 17-3.5-2"/><path d="m9 22 3-8 3 8"/><path d="M8 22h8"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-xl mb-2">Any AI provider</h3>
+          <p class="text-text-muted text-sm leading-relaxed">OpenAI, Anthropic, Gemini, DeepSeek, or local Ollama. Per-feature model selection so you can use GPT-4o for resumes and a cheaper model for forms.</p>
+        </div>
+
+        <!-- Card 8: Open Source -->
+        <div class="bento-card bg-card-bg rounded-2xl p-6 border border-card-border fade-up cursor-pointer">
+          <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-xl mb-2">Fully open source</h3>
+          <p class="text-text-muted text-sm leading-relaxed">Inspect every line of code. Self-host the backend. Own your data completely. No vendor lock-in, no hidden APIs, no surprises.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================= -->
+  <!-- PRODUCT DEMO -->
+  <!-- ============================================= -->
+  <section class="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-16 fade-up">
+        <h2 class="font-heading text-3xl sm:text-4xl font-bold mb-4">See it in action</h2>
+        <p class="text-text-muted text-lg max-w-2xl mx-auto">Real screenshots from the current product. What you see is what you get.</p>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-8 items-start">
+        <div class="fade-up">
+          <div class="rounded-2xl overflow-hidden border border-card-border shadow-lg">
+            <img src="assets/sidepanel-resume-draft.png" alt="Resume tailoring sidepanel showing structured resume preview with sections and match score" class="w-full h-auto" loading="lazy">
+          </div>
+          <p class="text-center text-text-muted text-sm mt-4 font-medium">Resume draft in the sidepanel — review and edit inline before continuing</p>
+        </div>
+        <div class="fade-up">
+          <div class="rounded-2xl overflow-hidden border border-card-border shadow-lg">
+            <img src="assets/sidepanel-fill-form-draft.png" alt="Fill Form sidepanel with AI-generated answers ready for review and autofill" class="w-full h-auto" loading="lazy">
+          </div>
+          <p class="text-center text-text-muted text-sm mt-4 font-medium">Generated form answers — edit, autofill, then save when you approve</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================= -->
+  <!-- PRICING -->
+  <!-- ============================================= -->
+  <section id="pricing" class="py-20 px-4 sm:px-6 lg:px-8 bg-surface">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-16 fade-up">
+        <h2 class="font-heading text-3xl sm:text-4xl font-bold mb-4">Simple, transparent pricing</h2>
+        <p class="text-text-muted text-lg max-w-2xl mx-auto">Start free with the open-source version. Upgrade to Pro when you want zero-setup convenience.</p>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        <!-- Open Source Card -->
+        <div class="fade-up bg-card-bg rounded-2xl p-8 border border-card-border">
+          <div class="mb-6">
+            <h3 class="font-heading font-bold text-2xl mb-1">Open Source</h3>
+            <p class="text-text-muted text-sm">Self-hosted, full control</p>
+          </div>
+          <div class="mb-6">
+            <span class="font-heading text-5xl font-bold">$0</span>
+            <span class="text-text-muted text-sm ml-1">forever</span>
+          </div>
+          <ul class="space-y-3 mb-8">
+            <li class="flex items-start gap-3 text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+              <span>All features included</span>
+            </li>
+            <li class="flex items-start gap-3 text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+              <span>Bring your own AI API key</span>
+            </li>
+            <li class="flex items-start gap-3 text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+              <span>Your own Supabase database</span>
+            </li>
+            <li class="flex items-start gap-3 text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+              <span>Self-hosted Docker backend</span>
+            </li>
+            <li class="flex items-start gap-3 text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+              <span>Community support via GitHub</span>
+            </li>
+            <li class="flex items-start gap-3 text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+              <span>Full source code access</span>
+            </li>
+          </ul>
+          <a href="https://github.com/ZidanHadipratama/IWantJob" target="_blank" rel="noopener noreferrer" class="flex items-center justify-center gap-2 w-full px-6 py-3 rounded-xl border-2 border-primary text-primary hover:bg-primary hover:text-white transition-colors duration-200 cursor-pointer font-semibold">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+            View on GitHub
+          </a>
+        </div>
+
+        <!-- Pro Card -->
+        <div class="fade-up pricing-highlight">
+          <div class="pricing-highlight-inner">
+          <div class="flex items-start justify-between mb-6">
+            <div>
+              <h3 class="font-heading font-bold text-2xl mb-1">Pro</h3>
+              <p class="text-text-muted text-sm">Managed, zero-setup</p>
+            </div>
+            <span class="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">Coming Soon</span>
+          </div>
+          <div class="mb-6">
+            <span class="font-heading text-5xl font-bold">TBD</span>
+            <span class="text-text-muted text-sm ml-1">/month</span>
+          </div>
+          <ul class="space-y-3 mb-8">
+            <li class="flex items-start gap-3 text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+              <span><strong>Everything in Open Source</strong>, plus:</span>
+            </li>
+            <li class="flex items-start gap-3 text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+              <span>Managed backend — no Docker required</span>
+            </li>
+            <li class="flex items-start gap-3 text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+              <span>Built-in AI — no API key needed</span>
+            </li>
+            <li class="flex items-start gap-3 text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+              <span>Managed database — no Supabase setup</span>
+            </li>
+            <li class="flex items-start gap-3 text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+              <span>Optimized prompts and faster models</span>
+            </li>
+            <li class="flex items-start gap-3 text-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+              <span>Priority support</span>
+            </li>
+          </ul>
+          <a href="mailto:zidanhadipratama@gmail.com?subject=IWantJob%20Pro%20Waitlist&body=I%27m%20interested%20in%20IWantJob%20Pro.%20Please%20add%20me%20to%20the%20waitlist." class="flex items-center justify-center gap-2 w-full px-6 py-3 rounded-xl bg-primary text-white hover:bg-primary-dark transition-colors duration-200 cursor-pointer font-semibold shadow-lg shadow-primary/20">
+            Join Waitlist
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================= -->
+  <!-- FAQ -->
+  <!-- ============================================= -->
+  <section id="faq" class="py-20 px-4 sm:px-6 lg:px-8 bg-white">
+    <div class="max-w-3xl mx-auto">
+      <div class="text-center mb-16 fade-up">
+        <h2 class="font-heading text-3xl sm:text-4xl font-bold mb-4">Frequently asked questions</h2>
+      </div>
+
+      <div class="space-y-4 fade-up">
+        <!-- FAQ 1 -->
+        <details class="group border border-card-border rounded-xl">
+          <summary class="flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-surface/50 transition-colors duration-200 rounded-xl">
+            <span class="font-heading font-semibold text-base pr-4">Do I need to be technical to use the open-source version?</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron flex-shrink-0 text-text-muted" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="px-6 pb-4 text-text-muted text-sm leading-relaxed">
+            You need basic comfort with Docker and terminal commands. The setup involves running <code class="bg-surface px-1.5 py-0.5 rounded text-xs">docker compose up</code>, creating a free Supabase project, and loading the extension in Chrome. The README walks through every step. If that feels like too much, the Pro plan will handle all of it for you.
+          </div>
+        </details>
+
+        <!-- FAQ 2 -->
+        <details class="group border border-card-border rounded-xl">
+          <summary class="flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-surface/50 transition-colors duration-200 rounded-xl">
+            <span class="font-heading font-semibold text-base pr-4">Which AI providers are supported?</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron flex-shrink-0 text-text-muted" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="px-6 pb-4 text-text-muted text-sm leading-relaxed">
+            OpenAI, Anthropic (Claude), Google Gemini, DeepSeek, and Ollama for local models. You can even use different models for different features — for example, GPT-4o for resume tailoring and a cheaper model for form filling. The Pro plan includes built-in AI so you don't need any API key.
+          </div>
+        </details>
+
+        <!-- FAQ 3 -->
+        <details class="group border border-card-border rounded-xl">
+          <summary class="flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-surface/50 transition-colors duration-200 rounded-xl">
+            <span class="font-heading font-semibold text-base pr-4">Is my data safe? Where is it stored?</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron flex-shrink-0 text-text-muted" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="px-6 pb-4 text-text-muted text-sm leading-relaxed">
+            With the open-source version, all data lives in your own Supabase database. API keys are stored in your browser's local storage and passed per-request — the backend never stores them. There is no telemetry, no analytics, and no logging of your content. The Pro plan uses managed infrastructure but maintains the same privacy-first approach.
+          </div>
+        </details>
+
+        <!-- FAQ 4 -->
+        <details class="group border border-card-border rounded-xl">
+          <summary class="flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-surface/50 transition-colors duration-200 rounded-xl">
+            <span class="font-heading font-semibold text-base pr-4">Does the extension auto-submit applications?</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron flex-shrink-0 text-text-muted" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="px-6 pb-4 text-text-muted text-sm leading-relaxed">
+            No. The workflow is intentionally draft-first. AI generates answers, you review and edit them, then you decide whether to autofill and submit. Nothing saves to your tracker until you explicitly approve it. You stay in control of every application.
+          </div>
+        </details>
+
+        <!-- FAQ 5 -->
+        <details class="group border border-card-border rounded-xl">
+          <summary class="flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-surface/50 transition-colors duration-200 rounded-xl">
+            <span class="font-heading font-semibold text-base pr-4">What job sites does it work on?</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron flex-shrink-0 text-text-muted" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="px-6 pb-4 text-text-muted text-sm leading-relaxed">
+            IWantJob uses Mozilla Readability for JD extraction and standard DOM analysis for form fields, so it works on most job sites without site-specific adapters. It handles standard HTML forms, custom combobox widgets, and even application forms hosted inside iframes. Some highly custom or JavaScript-heavy application portals may need manual field entry.
+          </div>
+        </details>
+
+        <!-- FAQ 6 -->
+        <details class="group border border-card-border rounded-xl">
+          <summary class="flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-surface/50 transition-colors duration-200 rounded-xl">
+            <span class="font-heading font-semibold text-base pr-4">What's the difference between Open Source and Pro?</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron flex-shrink-0 text-text-muted" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="px-6 pb-4 text-text-muted text-sm leading-relaxed">
+            Same core features. The difference is setup and convenience. Open Source means you run the backend yourself, bring your own AI key, and manage your own database. Pro means we handle all infrastructure — you just install the extension and start applying. Pro also includes optimized AI prompts and priority support.
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================= -->
+  <!-- FINAL CTA -->
+  <!-- ============================================= -->
+  <section class="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-surface to-white">
+    <div class="max-w-3xl mx-auto text-center fade-up">
+      <h2 class="font-heading text-3xl sm:text-4xl font-bold mb-4">Stop applying manually.<br>Start applying smarter.</h2>
+      <p class="text-text-muted text-lg mb-8 max-w-xl mx-auto">Join hundreds of job seekers who let AI handle the tedious parts so they can focus on landing the right role.</p>
+      <div class="flex flex-wrap justify-center gap-4">
+        <a href="https://github.com/ZidanHadipratama/IWantJob" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-primary text-white hover:bg-primary-dark transition-colors duration-200 cursor-pointer text-base font-semibold shadow-lg shadow-primary/20">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+          Get Started Free
+        </a>
+        <a href="#pricing" class="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl border-2 border-primary text-primary hover:bg-primary hover:text-white transition-colors duration-200 cursor-pointer text-base font-semibold">
+          Explore Pro
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================= -->
+  <!-- FOOTER -->
+  <!-- ============================================= -->
+  <footer class="py-12 px-4 sm:px-6 lg:px-8 border-t border-card-border bg-white">
+    <div class="max-w-7xl mx-auto">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <!-- Logo -->
+        <div class="flex items-center gap-2">
+          <div class="w-6 h-6 bg-primary rounded-md flex items-center justify-center">
+            <span class="text-white font-bold text-[10px]">IW</span>
+          </div>
+          <span class="font-heading font-bold text-lg text-primary">IWantJob</span>
+        </div>
+
+        <!-- Links -->
+        <div class="flex items-center gap-6 text-sm text-text-muted">
+          <a href="https://github.com/ZidanHadipratama/IWantJob" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors duration-200 cursor-pointer">GitHub</a>
+          <a href="https://github.com/ZidanHadipratama/IWantJob/issues" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors duration-200 cursor-pointer">Issues</a>
+          <a href="https://github.com/ZidanHadipratama/IWantJob/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" class="hover:text-primary transition-colors duration-200 cursor-pointer">License</a>
+        </div>
+
+        <!-- Copyright -->
+        <p class="text-sm text-text-muted">
+          Built with care. Open source under AGPL.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ============================================= -->
+  <!-- SCRIPTS -->
+  <!-- ============================================= -->
+  <script>
+    // Navbar scroll effect
+    const navbar = document.getElementById('navbar');
+    window.addEventListener('scroll', () => {
+      if (window.scrollY > 20) {
+        navbar.classList.add('nav-scrolled');
+      } else {
+        navbar.classList.remove('nav-scrolled');
+      }
+    }, { passive: true });
+
+    // Mobile menu toggle
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+    });
+
+    // Close mobile menu when clicking a link
+    mobileMenu.querySelectorAll('a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+      });
+    });
+
+    // Scroll-triggered fade-in animations
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, {
+        threshold: 0.1,
+        rootMargin: '0px 0px -40px 0px'
+      });
+
+      document.querySelectorAll('.fade-up').forEach(el => {
+        observer.observe(el);
+      });
+    } else {
+      // If reduced motion, make everything visible immediately
+      document.querySelectorAll('.fade-up').forEach(el => {
+        el.classList.add('visible');
+      });
+    }
+  </script>
+
+</body>
+</html>

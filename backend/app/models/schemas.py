@@ -108,6 +108,15 @@ class StructuredJobDescription(BaseModel):
     employment_type: Optional[str] = None
 
 
+class PriorAnswer(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    field_id: Optional[str] = None
+    question: str
+    answer: str
+    field_type: str = "text"
+
+
 class FillFormRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -119,6 +128,7 @@ class FillFormRequest(BaseModel):
     job_id: Optional[UUID] = None
     job_description: Optional[str] = None
     structured_job_description: Optional[StructuredJobDescription] = None
+    prior_answers: list[PriorAnswer] = Field(default_factory=list)
 
 
 class FillFormResponse(BaseModel):
@@ -141,6 +151,7 @@ class TailorResumeRequest(BaseModel):
     page_title: Optional[str] = None
     page_excerpt: Optional[str] = None
     metadata_lines: list[str] = Field(default_factory=list)
+    output_language: Optional[str] = None
     persist_job: bool = False
     job_id: Optional[UUID] = None
 
@@ -153,6 +164,25 @@ class TailorResumeResponse(BaseModel):
     structured_job_description: StructuredJobDescription
     match_score: float
     job_id: Optional[UUID] = None
+
+
+class GenerateCoverLetterRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    job_description: str
+    resume_json: Optional[ResumeJSON] = None
+    resume_text: Optional[str] = None
+    persona_text: Optional[str] = None
+    company: Optional[str] = None
+    title: Optional[str] = None
+    structured_job_description: Optional[StructuredJobDescription] = None
+    output_language: Optional[str] = None
+
+
+class GenerateCoverLetterResponse(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    cover_letter_text: str
 
 
 class LogJobRequest(BaseModel):
@@ -169,6 +199,7 @@ class LogJobRequest(BaseModel):
     location: Optional[str] = None
     salary_range: Optional[str] = None
     structured_job_description: Optional[StructuredJobDescription] = None
+    cover_letter_text: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -208,6 +239,7 @@ class LogJobResponse(BaseModel):
     location: Optional[str] = None
     salary_range: Optional[str] = None
     structured_job_description: Optional[StructuredJobDescription] = None
+    cover_letter_text: Optional[str] = None
     notes: Optional[str] = None
     created_at: str
 
@@ -226,6 +258,7 @@ class SaveApplicationDraftRequest(BaseModel):
     location: Optional[str] = None
     salary_range: Optional[str] = None
     structured_job_description: Optional[StructuredJobDescription] = None
+    cover_letter_text: Optional[str] = None
     notes: Optional[str] = None
     tailored_resume_json: ResumeJSON
     qa_pairs: list[QAPair] = Field(default_factory=list)
@@ -252,6 +285,7 @@ class JobListItem(BaseModel):
     location: Optional[str] = None
     salary_range: Optional[str] = None
     structured_job_description: Optional[StructuredJobDescription] = None
+    cover_letter_text: Optional[str] = None
     applied_at: Optional[str] = None
     created_at: str
 
@@ -270,6 +304,7 @@ class JobResponse(BaseModel):
     location: Optional[str] = None
     salary_range: Optional[str] = None
     structured_job_description: Optional[StructuredJobDescription] = None
+    cover_letter_text: Optional[str] = None
     applied_at: Optional[str] = None
     notes: Optional[str] = None
     created_at: str

@@ -1,4 +1,7 @@
+import path from "node:path"
 import { defineConfig } from "@playwright/test"
+
+const demoRoot = path.resolve(__dirname, "..", "assets", "demo")
 
 export default defineConfig({
   testDir: "./tests",
@@ -16,5 +19,12 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure"
+  },
+  webServer: {
+    command: `/home/ikktaa/app/IWantJob/.venv/bin/python3 -m http.server 4173 --directory "${demoRoot}"`,
+    url: "http://127.0.0.1:4173/index.html",
+    reuseExistingServer: true,
+    stdout: "ignore",
+    stderr: "pipe"
   }
 })

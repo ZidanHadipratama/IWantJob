@@ -42,6 +42,21 @@ def _format_structured_jd_summary(structured_jd) -> str:
     )
 
 
+def _format_prior_answers(prior_answers) -> str:
+    usable = [
+        answer
+        for answer in prior_answers
+        if getattr(answer, "question", "").strip() and getattr(answer, "answer", "").strip()
+    ]
+    if not usable:
+        return "None"
+
+    return "\n".join(
+        f"- {redact_free_text(answer.question)} -> {redact_free_text(answer.answer)}"
+        for answer in usable[:24]
+    )
+
+
 @router.post("/fill-form")
 async def fill_form(
     body: FillFormRequest,
@@ -87,6 +102,7 @@ async def fill_form(
             .replace("{persona_text}", body.persona_text or "Not provided")
             .replace("{job_description}", redact_free_text(body.job_description) if body.job_description else "Not provided")
             .replace("{structured_job_summary}", _format_structured_jd_summary(structured_jd) if structured_jd else "Not provided")
+            .replace("{prior_answers}", _format_prior_answers(body.prior_answers))
             .replace("{form_fields}", json.dumps(ai_fields, indent=2))
         )
 
